@@ -161,6 +161,13 @@ describe('Sync queue (spec §54)', () => {
     expect((await getInventory('inv-1'))!.items[0].localCheck).toBeUndefined();
   });
 
+  it('sends operations strictly in the order recorded, even within the same millisecond', async () => {
+    vi.spyOn(Date.prototype, 'toISOString').mockReturnValue('2026-09-27T09:00:00.000Z');
+    const labels = ['أولى', 'ثانية', 'ثالثة', 'رابعة'];
+    for (const label of labels) await enqueue({ type: 'asset.photo', fields: { assetId: 'a1' }, label });
+    expect((await listQueue()).map((o) => o.label)).toEqual(labels);
+  });
+
   it('a re-check replaces a still-pending check of the same item', async () => {
     const first = await queueCheck();
     const second = await queueCheck();

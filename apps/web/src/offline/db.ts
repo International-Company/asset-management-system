@@ -77,6 +77,8 @@ export interface QueuedOp {
   label: string;
   status: OpStatus;
   createdAt: string;
+  /** Position in the queue: operations are sent strictly in the order recorded. */
+  seq: number;
   attempts: number;
   errorCode?: string;
   message?: string;
@@ -186,7 +188,8 @@ export async function updateLocalAsset(id: string, patch: Partial<LocalAsset>): 
 
 export async function listQueue(): Promise<QueuedOp[]> {
   const ops = await (await db()).getAll('queue');
-  return ops.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  // Two operations can share a millisecond, so order by sequence, not time.
+  return ops.sort((a, b) => a.seq - b.seq);
 }
 
 /**
@@ -194,15 +197,14 @@ export async function listQueue(): Promise<QueuedOp[]> {
  * re-check of the same inventory item) is replaced, so both never reach the
  * server with the same base — which would make the second one a false conflict.
  */
-export async function enqueue(op: Omit<QueuedOp, 'id' | 'status' | 'createdAt' | 'attempts'>): Promise<QueuedOp> {
-  const d = await db();
-  if (op.target) {
-    for (const existing of await d.getAllFromIndex('queue', 'target', op.target)) {
-      if (existing.status === 'PENDING') await d.delete('queue', existing.id);
-    }
-  }
-  const full: QueuedOp = { ...op, id: crypto.randomUUID(), status: 'PENDING', createdAt: new Date().toISOString(), attempts: 0 };
-  await d.put('queue', full);
+export async function enqueue(op: Omit<QueuedOp, 'id' | 'status' | 'createdAt' | 'seq' | 'attempts'>): Promise<QueuedOp> {
+  const tx = (await db()).transaction('queue', 'readwrite');
+  const existing = await tx.store.getAll();
+  const seq = existing.reduce((max, o) => Math.max(max, o.seq), 0) + 1;
+  for (const o of existing) if (op.target && o.target === op.target && o.status === 'PENDING') void tx.store.delete(o.id);
+  const full: QueuedOp = { ...op, id: crypto.randomUUID(), status: 'PENDING', createdAt: new Date().toISOString(), seq, attempts: 0 };
+  void tx.store.put(full);
+  await tx.done;
   return full;
 }
 

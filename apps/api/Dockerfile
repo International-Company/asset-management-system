@@ -11,7 +11,10 @@ RUN npm ci --workspace @osooli/shared --workspace @osooli/api --include-workspac
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
 COPY apps/api apps/api
-RUN npm run build -w @osooli/shared && npm run build -w @osooli/api
+# prisma generate never connects, but prisma.config.ts requires DATABASE_URL.
+# The placeholder exists only in this build stage, not in the runtime image.
+RUN npm run build -w @osooli/shared \
+ && DATABASE_URL=postgresql://build:build@localhost:5432/build npm run build -w @osooli/api
 RUN npm prune --omit=dev --workspace @osooli/shared --workspace @osooli/api
 
 FROM node:24-alpine AS runtime
