@@ -14,10 +14,14 @@ import type { EapEmployee, EapProvider, FingerprintOptions, PasswordResult, Prov
  *   challenge; the Platform verifies the signature. The passkey must belong to
  *   the same Platform user who passed the password step.
  * - Employees: read with this application's machine token (client
- *   credentials). The application needs `platform.organization.view`.
+ *   credentials). The application needs `platform.employees.view`; with
+ *   `platform.organization.view` as well, job titles are shown by name rather
+ *   than position code.
  *
- * `eapEmployeeId` is the Platform's employee number: unique, readable, and not
- * changeable through the Platform API.
+ * `eapEmployeeId` is the Platform's employee id, as the Platform's own guide
+ * for this integration specifies (docs/development/usooli-integration.md).
+ * A Platform account with no employee record cannot sign in: a person who is
+ * not an employee cannot hold an asset.
  */
 
 interface PlatformEmployee {
@@ -26,6 +30,7 @@ interface PlatformEmployee {
   fullName: { ar: string; en: string };
   userId: string | null;
   positionId: string | null;
+  positionCode: string | null;
   workEmail: string | null;
   workPhone: string | null;
   isActive: boolean;
@@ -55,10 +60,8 @@ class PlatformError extends Error {
 const REQUEST_TIMEOUT_MS = 10_000;
 /** Renew the machine token this long before it expires. */
 const TOKEN_MARGIN_MS = 60_000;
-/** How long the user → employee and position lists are reused. */
-const DIRECTORY_TTL_MS = 5 * 60_000;
-/** A safety net: never page forever if the Platform misreports hasNext. */
-const MAX_PAGES = 200;
+/** How long position titles are reused. */
+const POSITIONS_TTL_MS = 5 * 60_000;
 
 export class EapHttpProvider implements EapProvider {
   readonly name = 'eap' as const;
@@ -66,8 +69,8 @@ export class EapHttpProvider implements EapProvider {
   private readonly base: string;
   private token: { value: string; expiresAt: number } | null = null;
   private pendingToken: Promise<string> | null = null;
-  private positions: { titles: Map<string, string>; at: number } | null = null;
-  private userDirectory: { byUserId: Map<string, PlatformEmployee>; at: number } | null = null;
+  /** Position titles; `null` titles = this application may not read positions. */
+  private positions: { titles: Map<string, string> | null; at: number } | null = null;
 
   constructor(
     private readonly config: { baseUrl: string; clientId: string; clientSecret: string },
@@ -91,9 +94,10 @@ export class EapHttpProvider implements EapProvider {
     await this.endPlatformSession(result.accessToken);
     if (result.user.mustChangePassword) return { ok: false, reason: 'password_change_required' };
 
-    const employee = await this.employeeForUser(result.user.id);
+    // Policy: only an active employee may sign in (no employee record → refused).
+    const employee = await this.machineOrNull<PlatformEmployee>(`/organization/employees/by-user/${encodeURIComponent(result.user.id)}`);
     if (!employee || !employee.isActive) return { ok: false };
-    return { ok: true, eapEmployeeId: employee.employeeNumber, providerRef: result.user.id };
+    return { ok: true, eapEmployeeId: employee.id, providerRef: result.user.id };
   }
 
   async fingerprintOptions(): Promise<FingerprintOptions> {
@@ -141,9 +145,8 @@ export class EapHttpProvider implements EapProvider {
   // ── Employees ─────────────────────────────────────────────────────────
 
   async getEmployee(eapEmployeeId: string): Promise<EapEmployee | null> {
-    const page = await this.machine<Paged<PlatformEmployee>>(`/organization/employees?q=${encodeURIComponent(eapEmployeeId)}&pageSize=100`);
-    const match = page.items.find((e) => e.employeeNumber === eapEmployeeId);
-    return match ? this.toEmployee(match) : null;
+    const employee = await this.machineOrNull<PlatformEmployee>(`/organization/employees/${encodeURIComponent(eapEmployeeId)}`);
+    return employee ? this.toEmployee(employee) : null;
   }
 
   async searchEmployees(query: string, limit: number): Promise<EapEmployee[]> {
@@ -171,37 +174,31 @@ export class EapHttpProvider implements EapProvider {
 
   private async toEmployee(e: PlatformEmployee): Promise<EapEmployee> {
     return {
-      eapEmployeeId: e.employeeNumber,
+      eapEmployeeId: e.id,
       fullName: e.fullName.ar || e.fullName.en,
-      jobTitle: e.positionId ? ((await this.positionTitles()).get(e.positionId) ?? null) : null,
+      jobTitle: await this.jobTitle(e),
       email: e.workEmail,
       phone: e.workPhone,
       isActive: e.isActive,
     };
   }
 
-  /** The employee linked to a Platform user account (the list has no userId filter). */
-  private async employeeForUser(userId: string): Promise<PlatformEmployee | null> {
-    const fresh = this.userDirectory && Date.now() - this.userDirectory.at < DIRECTORY_TTL_MS;
-    const cached = fresh ? this.userDirectory!.byUserId.get(userId) : undefined;
-    if (cached) return cached;
-    // Unknown or stale: reload (a new starter, or a newly linked account).
-    const byUserId = new Map<string, PlatformEmployee>();
-    for (let page = 1; page <= MAX_PAGES; page++) {
-      const res = await this.machine<Paged<PlatformEmployee>>(`/organization/employees?page=${page}&pageSize=100&sort=employeeNumber`);
-      for (const e of res.items) if (e.userId) byUserId.set(e.userId, e);
-      if (!res.hasNext) break;
+  /** The position's name when positions may be read, otherwise its code. */
+  private async jobTitle(e: PlatformEmployee): Promise<string | null> {
+    if (!e.positionId) return null;
+    if (!this.positions || Date.now() - this.positions.at >= POSITIONS_TTL_MS) {
+      try {
+        const list = await this.call<Array<{ id: string; title: { ar: string; en: string } }>>('/organization/positions?includeInactive=true', {
+          bearer: await this.machineToken(),
+        });
+        this.positions = { titles: new Map(list.map((p) => [p.id, p.title.ar || p.title.en])), at: Date.now() };
+      } catch (err) {
+        // Without platform.organization.view the code is enough; not an outage.
+        if (!(err instanceof PlatformError && err.status === 403)) throw this.unavailable(err);
+        this.positions = { titles: null, at: Date.now() };
+      }
     }
-    this.userDirectory = { byUserId, at: Date.now() };
-    return byUserId.get(userId) ?? null;
-  }
-
-  private async positionTitles(): Promise<Map<string, string>> {
-    if (this.positions && Date.now() - this.positions.at < DIRECTORY_TTL_MS) return this.positions.titles;
-    const list = await this.machine<Array<{ id: string; title: { ar: string; en: string } }>>('/organization/positions?includeInactive=true');
-    const titles = new Map(list.map((p) => [p.id, p.title.ar || p.title.en]));
-    this.positions = { titles, at: Date.now() };
-    return titles;
+    return this.positions.titles?.get(e.positionId) ?? e.positionCode;
   }
 
   /** Ends the Platform session a sign-in step opened. Best effort. */
@@ -213,20 +210,33 @@ export class EapHttpProvider implements EapProvider {
     }
   }
 
-  /** A call made as this application, retried once with a fresh token on 401. */
+  /** Like machine(), but a 404 (no such employee) is null rather than an error. */
+  private async machineOrNull<T>(path: string): Promise<T | null> {
+    try {
+      return await this.machineRaw<T>(path);
+    } catch (e) {
+      if (e instanceof PlatformError && e.status === 404) return null;
+      throw this.unavailable(e);
+    }
+  }
+
+  /** A call made as this application; failures become a safe Arabic error. */
   private async machine<T>(path: string): Promise<T> {
+    try {
+      return await this.machineRaw<T>(path);
+    } catch (e) {
+      throw this.unavailable(e);
+    }
+  }
+
+  /** Retried once with a fresh token on 401 (revoked or rotated credential). */
+  private async machineRaw<T>(path: string): Promise<T> {
     try {
       return await this.call<T>(path, { bearer: await this.machineToken() });
     } catch (e) {
-      if (e instanceof PlatformError && e.status === 401) {
-        this.token = null;
-        try {
-          return await this.call<T>(path, { bearer: await this.machineToken() });
-        } catch (retry) {
-          throw this.unavailable(retry);
-        }
-      }
-      throw this.unavailable(e);
+      if (!(e instanceof PlatformError && e.status === 401)) throw e;
+      this.token = null;
+      return this.call<T>(path, { bearer: await this.machineToken() });
     }
   }
 

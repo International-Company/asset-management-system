@@ -44,16 +44,17 @@ EAP is the company's Central Platform (repository `company-central-platform`). T
 | --- | --- |
 | Username and password | `POST /api/v1/auth/login`. The Platform session it opens is closed at once; the Asset System keeps its own session. |
 | Fingerprint | A **passkey**: the device checks the fingerprint, which never leaves it, and signs the Platform's challenge (`/auth/passkey/options`, `/auth/passkey`). The passkey must belong to the same Platform user as the password step. |
-| Employees (link, search, daily sync) | `/api/v1/organization/employees` with the application's machine token (client credentials). |
+| Employees (link, search, daily sync) | `/api/v1/organization/employees/by-user/{userId}`, `/employees/{id}` and `/employees?q=`, with the application's machine token (client credentials). |
 
-`eapEmployeeId` in the Asset System is the Platform's **employee number**. Asset System usernames must equal Platform usernames.
+`eapEmployeeId` in the Asset System is the Platform's **employee id** (as the Platform's `docs/development/usooli-integration.md` specifies). Asset System usernames must equal Platform usernames. A Platform account with no employee record, or an inactive employee, cannot sign in.
 
 ### Setup in the Platform (by a Platform administrator)
 
-1. Register an application: code `assets`, name «نظام إدارة الأصول».
+1. Register an application: code `osooli`, name «أصولي».
 2. Issue a credential. The client secret is shown **once**.
-3. Give the application a role holding `platform.organization.view`, and nothing more.
+3. Give the application a role holding `platform.employees.view` at scope All. Optionally add `platform.organization.view` so job titles show by name instead of position code. Never a Platform administrator role.
 4. Every person who signs in needs a Platform account linked to their employee record, and a passkey registered on their device.
+5. Check the credential before touching the Asset System: `POST /api/v1/oauth/token` (form: `grant_type=client_credentials&client_id=…&client_secret=…`) must return an `access_token`, and `GET /api/v1/organization/employees?pageSize=1` with it must succeed. Then the control panel's system status shows EAP as up.
 
 ### Setup in Railway (`api` service)
 
