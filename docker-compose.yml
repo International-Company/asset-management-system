@@ -1,0 +1,69 @@
+# Local development stack. Not used in production (Railway provides
+# PostgreSQL and the app is deployed from the Dockerfiles).
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: osooli
+      POSTGRES_PASSWORD: osooli_dev
+      POSTGRES_DB: osooli
+      TZ: Asia/Hebron
+    ports:
+      - '5433:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U osooli -d osooli']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # S3-compatible object storage for development.
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: osooli
+      MINIO_ROOT_PASSWORD: osooli_dev_secret
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    profiles: ['full']
+    env_file: apps/api/.env
+    environment:
+      DATABASE_URL: postgresql://osooli:osooli_dev@postgres:5432/osooli
+      STORAGE_ENDPOINT: http://minio:9000
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    profiles: ['full']
+    ports:
+      - '8080:80'
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  miniodata:

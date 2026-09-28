@@ -1,0 +1,124 @@
+# CI/CD (spec §76): Lint → Type Check → Tests → Build → Deploy Railway.
+# Any failing check stops the pipeline and nothing is deployed.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 24
+  APP_ENV: test
+  AUTH_PROVIDER: mock
+  MOCK_AUTH_PASSWORD: ci-password
+  MOCK_AUTH_FINGERPRINT: '000000'
+  ENCRYPTION_KEY: ci-only-encryption-key-0123456789abcdef
+  DATABASE_URL: postgresql://osooli:osooli_ci@localhost:5432/osooli_test
+  TEST_DATABASE_URL: postgresql://osooli:osooli_ci@localhost:5432/osooli_test
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: osooli
+          POSTGRES_PASSWORD: osooli_ci
+          POSTGRES_DB: osooli_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U osooli" --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+
+      - name: Build shared package & generate Prisma client
+        run: npm run build -w @osooli/shared && npm run prisma:generate -w @osooli/api
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Migrations have no drift from the schema
+        run: |
+          cd apps/api
+          npx prisma migrate deploy
+          npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+      - name: Install Chromium (PDF rendering and E2E)
+        run: npx playwright install --with-deps chromium
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Integration & API tests (PostgreSQL)
+        run: npm run test:integration
+
+      - name: Build
+        run: npm run build
+
+      - name: E2E tests
+        run: npx playwright test
+
+      - name: Performance budgets (20,000 assets, 100,000 audit entries)
+        run: npm run perf
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: test-results/
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -f apps/api/Dockerfile -t osooli-api .
+      - name: Build web image
+        run: docker build -f apps/web/Dockerfile -t osooli-web .
+      - name: Web image serves the app with security headers and redirects plain HTTP
+        run: |
+          docker run -d --name web -p 8080:80 --add-host api:127.0.0.1 osooli-web
+          for i in $(seq 1 20); do curl -fs http://localhost:8080/ >/dev/null && break; sleep 1; done
+          for path in / /sw.js /manifest.webmanifest /qr/some-token; do
+            headers=$(curl -fsI "http://localhost:8080$path")
+            for h in strict-transport-security content-security-policy x-frame-options x-content-type-options; do
+              echo "$headers" | grep -qi "^$h:" || { echo "Missing $h on $path"; exit 1; }
+            done
+          done
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: http' http://localhost:8080/)" = 301
+          docker rm -f web
+
+  deploy:
+    # Production deploy only from main, only after every check passed.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [verify, docker]
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "RAILWAY_TOKEN is not configured; refusing to deploy." >&2
+            exit 1
+          fi
+          npm install -g @railway/cli
+          railway up --service "${{ vars.RAILWAY_API_SERVICE }}" --detach --ci
+          railway up --service "${{ vars.RAILWAY_WEB_SERVICE }}" --detach --ci

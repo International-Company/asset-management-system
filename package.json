@@ -1,0 +1,46 @@
+{
+  "name": "osooli",
+  "private": true,
+  "description": "Company Asset Management System — نظام إدارة أصول الشركة",
+  "workspaces": [
+    "packages/shared",
+    "apps/api",
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build -w @osooli/shared && npm run build -w @osooli/api && npm run build -w @osooli/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run build -w @osooli/shared && npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:integration": "npm run test:integration -w @osooli/api",
+    "db:up": "docker compose up -d postgres minio",
+    "db:migrate": "npm run prisma:migrate -w @osooli/api",
+    "db:seed": "npm run prisma:seed -w @osooli/api",
+    "dev:api": "npm run start:dev -w @osooli/api",
+    "dev:web": "npm run dev -w @osooli/web",
+    "format": "prettier --write .",
+    "perf": "node apps/api/scripts/perf-check.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "prettier": "^3.6.0",
+    "typescript": "~6.0.3"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.10.0": true,
+    "esbuild@0.28.2": true,
+    "unrs-resolver@1.12.2": true,
+    "prisma@7.10.0": true,
+    "@parcel/watcher": false,
+    "@embedded-postgres/windows-x64@18.4.0-beta.17": true,
+    "@swc/core@1.16.2": true
+  },
+  "overrides": {
+    "mysql2": "^3.23.1",
+    "deepmerge-ts": "^8.0.0",
+    "uuid": "^11.1.1"
+  }
+}

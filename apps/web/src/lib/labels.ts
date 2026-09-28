@@ -1,0 +1,87 @@
+/** Arabic labels for codes shown in administration screens. Unknown codes fall back to the raw code. */
+
+export { ENTITY_LABELS, LOGIN_FAILURE_REASONS, operationLabel, SECURITY_EVENT_LABELS } from '@osooli/shared';
+
+export const PERMISSION_GROUP_LABELS: Record<string, string> = {
+  assets: 'الأصول',
+  categories: 'الفئات',
+  locations: 'المواقع',
+  departments: 'الأقسام',
+  external_people: 'المسؤولون الخارجيون',
+  transfers: 'النقل',
+  custody: 'العهدة',
+  custody_returns: 'إرجاع العهدة',
+  inventory: 'الجرد',
+  maintenance: 'الصيانة',
+  sales: 'المبيعات',
+  documents: 'المستندات',
+  qr: 'QR',
+  reports: 'التقارير',
+  audit: 'سجل التدقيق',
+  security: 'الأمان',
+  notifications: 'الإشعارات',
+  saved_searches: 'البحث المحفوظ',
+  users: 'المستخدمون',
+  roles: 'الأدوار',
+  settings: 'الإعدادات',
+  dashboard: 'لوحة التحكم',
+  health: 'حالة النظام',
+};
+
+export const ROLE_KEY_LABELS: Record<string, string> = {
+  SYSTEM_ADMINISTRATOR: 'مدير النظام',
+  ASSET_MANAGER: 'مدير الأصول',
+};
+
+export const ASSET_EVENT_LABELS: Record<string, string> = {
+  CREATED: 'إنشاء الأصل',
+  UPDATED: 'تعديل البيانات',
+  CATEGORY_CHANGED: 'تغيير الفئة',
+  SERIAL_CHANGED: 'تغيير الرقم التسلسلي',
+  TRANSFERRED: 'نقل',
+  CUSTODY_CREATED: 'محضر عهدة',
+  CUSTODY_CONFIRMED: 'تأكيد استلام عهدة',
+  CUSTODY_REJECTED: 'رفض استلام عهدة',
+  CUSTODY_CANCELLED: 'إلغاء محضر عهدة',
+  CUSTODY_RETURNED: 'إرجاع عهدة',
+  INVENTORY_CHECKED: 'فحص جرد',
+  MAINTENANCE_OPENED: 'فتح صيانة',
+  MAINTENANCE_UPDATED: 'تحديث صيانة',
+  MAINTENANCE_COMPLETED: 'اكتمال صيانة',
+  MAINTENANCE_CLOSED: 'انتهاء صيانة',
+  SOLD: 'بيع',
+  DOCUMENT_ADDED: 'إضافة مستند',
+  DOCUMENT_REPLACED: 'استبدال مستند (نسخة جديدة)',
+  PHOTO_ADDED: 'إضافة صورة',
+  PHOTO_REMOVED: 'حذف صورة',
+  MAIN_PHOTO_CHANGED: 'تغيير الصورة الرئيسية',
+};
+
+/** Arabic names for asset fields, used in "old → new" reviews and history. */
+export const ASSET_FIELD_LABELS: Record<string, string> = {
+  name: 'اسم الأصل',
+  notes: 'ملاحظات',
+  'purchase.date': 'تاريخ الشراء',
+  'purchase.supplier': 'المورد',
+  'purchase.invoiceNumber': 'رقم الفاتورة',
+  'purchase.value': 'قيمة الشراء',
+  'purchase.currency': 'العملة',
+  'warranty.exists': 'يوجد ضمان',
+  'warranty.expiresAt': 'تاريخ انتهاء الضمان',
+  'warranty.details': 'تفاصيل الضمان',
+  'technical.manufacturer': 'الشركة المصنعة',
+  'technical.model': 'الطراز',
+  'technical.macAddress': 'عنوان MAC',
+  'technical.ipAddress': 'عنوان IP',
+  'technical.operatingSystem': 'نظام التشغيل',
+  'technical.specifications': 'المواصفات',
+  'realEstate.propertyType': 'نوع العقار',
+  'realEstate.propertyName': 'اسم / وصف العقار',
+  'realEstate.locationText': 'موقع العقار',
+  'realEstate.area': 'المساحة',
+  'realEstate.propertyNumber': 'رقم العقار',
+  'realEstate.parcelNumber': 'رقم القطعة',
+  'realEstate.ownershipDeed': 'سند الملكية',
+  'realEstate.ownershipDate': 'تاريخ الملكية',
+  'realEstate.ownershipNotes': 'ملاحظات الملكية',
+};

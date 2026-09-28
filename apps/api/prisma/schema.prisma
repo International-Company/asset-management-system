@@ -1,0 +1,1116 @@
+// Company Asset Management System — database schema (Spec v1.0).
+//
+// Conventions:
+// - Tables/columns are snake_case via @@map/@map; Prisma models are PascalCase.
+// - Constraints that Prisma cannot express (CHECKs, partial unique indexes,
+//   immutability triggers) live in the SQL migrations. See docs/database.md.
+// - Historical rows are never deleted: FKs to history use onDelete: Restrict.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum MainCategoryCode {
+  OFF
+  OPR
+  TEC
+  REA
+}
+
+enum AssetStatus {
+  NEW
+  IN_USE
+  UNUSED
+  UNDER_MAINTENANCE
+  DAMAGED
+  LOST
+  DISPOSED
+  SOLD
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum CustodyStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  CANCELLED
+}
+
+enum MaintenanceStatus {
+  NEW
+  IN_PROGRESS
+  COMPLETED
+  CLOSED
+}
+
+enum TechnicianType {
+  EMPLOYEE
+  EXTERNAL
+  COMPANY
+}
+
+enum InventoryStatus {
+  IN_PROGRESS
+  CLOSED
+}
+
+enum SessionStatus {
+  ACTIVE
+  LOGGED_OUT
+  EXPIRED
+  TERMINATED
+}
+
+enum SecurityEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  ACCOUNT_LOCKED
+  SESSION_EXPIRED
+  SESSION_TERMINATED
+  ROLE_CHANGED
+  PERMISSION_CHANGED
+  SECURITY_SETTING_CHANGED
+  USER_CREATED
+  USER_ACTIVATED
+  USER_DEACTIVATED
+  USER_UNLOCKED
+}
+
+enum SyncOperationStatus {
+  PENDING
+  SYNCING
+  SYNCED
+  NEEDS_REVIEW
+}
+
+enum AssetEventType {
+  CREATED
+  UPDATED
+  CATEGORY_CHANGED
+  SERIAL_CHANGED
+  TRANSFERRED
+  CUSTODY_CREATED
+  CUSTODY_CONFIRMED
+  CUSTODY_REJECTED
+  CUSTODY_CANCELLED
+  CUSTODY_RETURNED
+  INVENTORY_CHECKED
+  MAINTENANCE_OPENED
+  MAINTENANCE_UPDATED
+  MAINTENANCE_COMPLETED
+  MAINTENANCE_CLOSED
+  SOLD
+  DOCUMENT_ADDED
+  DOCUMENT_REPLACED
+  PHOTO_ADDED
+  PHOTO_REMOVED
+  MAIN_PHOTO_CHANGED
+}
+
+// ─────────────────────────────────────────────────────────────
+// People, users, roles
+// ─────────────────────────────────────────────────────────────
+
+/// Minimal cache of EAP employees. EAP is the source of truth; only the
+/// fields needed for display and responsibility are stored.
+model Employee {
+  id            String   @id @default(uuid()) @db.Uuid
+  eapEmployeeId String   @unique @map("eap_employee_id")
+  fullName      String   @map("full_name")
+  jobTitle      String?  @map("job_title")
+  email         String?
+  phone         String?
+  isActive      Boolean  @default(true) @map("is_active")
+  lastSyncedAt  DateTime @default(now()) @map("last_synced_at") @db.Timestamptz(3)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user                    User?
+  responsibleFor          Asset[]             @relation("AssetResponsibleEmployee")
+  custodiesReceiving      Custody[]           @relation("CustodyNewResponsibleEmployee")
+  custodyReturnItemsNew   CustodyReturnItem[] @relation("ReturnNewResponsibleEmployee")
+  maintenanceAsTechnician Maintenance[]       @relation("MaintenanceTechnicianEmployee")
+  inventoryActualResp     InventoryItem[]     @relation("InventoryActualResponsibleEmployee")
+  inventoryExpectedResp   InventoryItem[]     @relation("InventoryExpectedResponsibleEmployee")
+  custodyItemsPrevious    CustodyItem[]       @relation("CustodyItemPreviousEmployee")
+  returnItemsPrevious     CustodyReturnItem[] @relation("ReturnItemPreviousEmployee")
+
+  @@map("employees")
+}
+
+/// A system account. Authentication is delegated to EAP; no password or
+/// biometric data is ever stored here.
+model User {
+  id               String    @id @default(uuid()) @db.Uuid
+  employeeId       String    @unique @map("employee_id") @db.Uuid
+  username         String    @unique
+  isActive         Boolean   @default(true) @map("is_active")
+  failedLoginCount Int       @default(0) @map("failed_login_count")
+  lockedUntil      DateTime? @map("locked_until") @db.Timestamptz(3)
+  lastLoginAt      DateTime? @map("last_login_at") @db.Timestamptz(3)
+  preferences      Json      @default("{}")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  employee      Employee       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  roles         UserRole[]
+  sessions      Session[]
+  notifications Notification[]
+  savedSearches SavedSearch[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String       @id @default(uuid()) @db.Uuid
+  key         String       @unique
+  name        String
+  description String?
+  isSystem    Boolean      @default(false) @map("is_system")
+  status      RecordStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  permissions            RolePermission[]
+  users                  UserRole[]
+  savedSearchShares      SavedSearchShare[]
+  notificationRecipients NotificationRecipient[]
+
+  @@map("roles")
+}
+
+model Permission {
+  key   String @id
+  label String
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId        String @map("role_id") @db.Uuid
+  permissionKey String @map("permission_key")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionKey], references: [key], onDelete: Restrict)
+
+  @@id([roleId, permissionKey])
+  @@map("role_permissions")
+}
+
+/// Role assignment. Optional location/department scope is reserved for the
+/// future scoped-permissions feature (spec §45); null = global.
+model UserRole {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  roleId            String   @map("role_id") @db.Uuid
+  scopeLocationId   String?  @map("scope_location_id") @db.Uuid
+  scopeDepartmentId String?  @map("scope_department_id") @db.Uuid
+  assignedById      String?  @map("assigned_by_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role            Role        @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  scopeLocation   Location?   @relation(fields: [scopeLocationId], references: [id], onDelete: Restrict)
+  scopeDepartment Department? @relation(fields: [scopeDepartmentId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("user_roles")
+}
+
+model ExternalPerson {
+  id           String       @id @default(uuid()) @db.Uuid
+  name         String
+  phone        String?
+  organization String?
+  notes        String?
+  status       RecordStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  responsibleFor        Asset[]             @relation("AssetResponsibleExternal")
+  custodiesReceiving    Custody[]           @relation("CustodyNewResponsibleExternal")
+  custodyReturnItemsNew CustodyReturnItem[] @relation("ReturnNewResponsibleExternal")
+  inventoryActualResp   InventoryItem[]     @relation("InventoryActualResponsibleExternal")
+  inventoryExpectedResp InventoryItem[]     @relation("InventoryExpectedResponsibleExternal")
+  custodyItemsPrevious  CustodyItem[]       @relation("CustodyItemPreviousExternal")
+  returnItemsPrevious   CustodyReturnItem[] @relation("ReturnItemPreviousExternal")
+
+  @@map("external_people")
+}
+
+/// External technicians and maintenance companies (managed in Settings).
+model MaintenanceProvider {
+  id        String         @id @default(uuid()) @db.Uuid
+  type      TechnicianType
+  name      String
+  phone     String?
+  notes     String?
+  status    RecordStatus   @default(ACTIVE)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  maintenances Maintenance[]
+
+  @@unique([type, name])
+  @@map("maintenance_providers")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sessions & security
+// ─────────────────────────────────────────────────────────────
+
+model Session {
+  id             String        @id @default(uuid()) @db.Uuid
+  userId         String        @map("user_id") @db.Uuid
+  tokenHash      String        @unique @map("token_hash")
+  status         SessionStatus @default(ACTIVE)
+  ip             String?
+  userAgent      String?       @map("user_agent")
+  device         String?
+  browser        String?
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt     DateTime      @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  expiresAt      DateTime      @map("expires_at") @db.Timestamptz(3)
+  endedAt        DateTime?     @map("ended_at") @db.Timestamptz(3)
+  terminatedById String?       @map("terminated_by_id") @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status])
+  @@map("sessions")
+}
+
+/// Short-lived state for the multi-step login (username → password → fingerprint).
+model LoginChallenge {
+  id          String    @id @default(uuid()) @db.Uuid
+  username    String
+  step        String
+  providerRef String?   @map("provider_ref")
+  ip          String?
+  userAgent   String?   @map("user_agent")
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt  DateTime? @map("consumed_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@map("login_challenges")
+}
+
+/// Security log (spec §50). Append-only: UPDATE/DELETE blocked by trigger.
+model SecurityLog {
+  id        BigInt            @id @default(autoincrement())
+  type      SecurityEventType
+  userId    String?           @map("user_id") @db.Uuid
+  username  String?
+  actorId   String?           @map("actor_id") @db.Uuid
+  sessionId String?           @map("session_id") @db.Uuid
+  ip        String?
+  device    String?
+  browser   String?
+  details   Json              @default("{}")
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([type, createdAt])
+  @@index([userId, createdAt])
+  @@map("security_logs")
+}
+
+/// Audit log (spec §51). Append-only: UPDATE/DELETE blocked by trigger,
+/// including for the System Administrator.
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorId    String?  @map("actor_id") @db.Uuid
+  actorName  String?  @map("actor_name")
+  operation  String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  oldData    Json?    @map("old_data")
+  newData    Json?    @map("new_data")
+  metadata   Json     @default("{}")
+  requestId  String?  @map("request_id")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Settings & numbering
+// ─────────────────────────────────────────────────────────────
+
+model Setting {
+  key         String   @id
+  value       Json
+  isSensitive Boolean  @default(false) @map("is_sensitive")
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("settings")
+}
+
+model Currency {
+  code      String       @id @db.VarChar(3)
+  nameAr    String       @map("name_ar")
+  symbol    String?
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  assetsPurchased Asset[]
+  sales           Sale[]
+  maintenances    Maintenance[]
+
+  @@map("currencies")
+}
+
+/// Atomic, never-reused sequences (asset numbers per category, operation
+/// numbers, internal serials). Allocated with UPDATE … RETURNING.
+model NumberSequence {
+  key       String   @id
+  prefix    String
+  nextValue BigInt   @map("next_value")
+  digits    Int      @default(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("number_sequences")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Reference data
+// ─────────────────────────────────────────────────────────────
+
+model MainCategory {
+  code        MainCategoryCode @id
+  nameAr      String           @map("name_ar")
+  sequenceKey String           @unique @map("sequence_key")
+
+  subcategories Subcategory[]
+  assets        Asset[]
+
+  @@map("main_categories")
+}
+
+model Subcategory {
+  id           String           @id @default(uuid()) @db.Uuid
+  mainCategory MainCategoryCode @map("main_category")
+  name         String
+  status       RecordStatus     @default(ACTIVE)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  category MainCategory @relation(fields: [mainCategory], references: [code], onDelete: Restrict)
+  assets   Asset[]
+
+  // Composite key target so Asset can enforce subcategory ∈ main category.
+  @@unique([id, mainCategory])
+  @@unique([mainCategory, name])
+  @@map("subcategories")
+}
+
+model Location {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String       @unique
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  departments           LocationDepartment[]
+  roleScopes            UserRole[]
+  inventoryScopes       InventoryScope[]
+  transfersFrom         Transfer[]                   @relation("TransferFromLocation")
+  transfersTo           Transfer[]                   @relation("TransferToLocation")
+  inventoryExpected     InventoryItem[]              @relation("InventoryExpectedLocation")
+  inventoryActual       InventoryItem[]              @relation("InventoryActualLocation")
+  inventoryUnregistered InventoryUnregisteredAsset[]
+
+  @@map("locations")
+}
+
+model Department {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String       @unique
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  locations             LocationDepartment[]
+  roleScopes            UserRole[]
+  inventoryScopes       InventoryScope[]
+  transfersFrom         Transfer[]                   @relation("TransferFromDepartment")
+  transfersTo           Transfer[]                   @relation("TransferToDepartment")
+  inventoryExpected     InventoryItem[]              @relation("InventoryExpectedDepartment")
+  inventoryActual       InventoryItem[]              @relation("InventoryActualDepartment")
+  inventoryUnregistered InventoryUnregisteredAsset[]
+
+  @@map("departments")
+}
+
+/// Registered location/department combinations. Assets may only reference
+/// a registered pair (composite FK).
+model LocationDepartment {
+  locationId   String       @map("location_id") @db.Uuid
+  departmentId String       @map("department_id") @db.Uuid
+  status       RecordStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  location   Location   @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  assets     Asset[]
+
+  @@id([locationId, departmentId])
+  @@map("location_departments")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Files & documents
+// ─────────────────────────────────────────────────────────────
+
+/// Metadata for an object in Object Storage. File bytes are never stored in
+/// PostgreSQL.
+model StoredFile {
+  id           String   @id @default(uuid()) @db.Uuid
+  storageKey   String   @unique @map("storage_key")
+  originalName String   @map("original_name")
+  mimeType     String   @map("mime_type")
+  sizeBytes    BigInt   @map("size_bytes")
+  sha256       String
+  uploadedById String?  @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  documentVersions        DocumentVersion[]
+  assetPhotos             AssetPhoto[]
+  maintenanceBeforePhotos Maintenance[]                @relation("MaintenanceBeforePhoto")
+  maintenanceAfterPhotos  Maintenance[]                @relation("MaintenanceAfterPhoto")
+  inventoryItemPhotos     InventoryItem[]
+  inventoryUnregistered   InventoryUnregisteredAsset[]
+
+  @@map("stored_files")
+}
+
+/// A named document attached to exactly one owner (an asset or one
+/// operation) — enforced by CHECK num_nonnulls(...) = 1.
+model Document {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String
+  isOfficial      Boolean  @default(false) @map("is_official")
+  assetId         String?  @map("asset_id") @db.Uuid
+  transferId      String?  @map("transfer_id") @db.Uuid
+  custodyId       String?  @map("custody_id") @db.Uuid
+  custodyReturnId String?  @map("custody_return_id") @db.Uuid
+  maintenanceId   String?  @map("maintenance_id") @db.Uuid
+  saleId          String?  @map("sale_id") @db.Uuid
+  inventoryId     String?  @map("inventory_id") @db.Uuid
+  createdById     String?  @map("created_by_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  asset         Asset?            @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  transfer      Transfer?         @relation(fields: [transferId], references: [id], onDelete: Restrict)
+  custody       Custody?          @relation(fields: [custodyId], references: [id], onDelete: Restrict)
+  custodyReturn CustodyReturn?    @relation(fields: [custodyReturnId], references: [id], onDelete: Restrict)
+  maintenance   Maintenance?      @relation(fields: [maintenanceId], references: [id], onDelete: Restrict)
+  sale          Sale?             @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  inventory     Inventory?        @relation(fields: [inventoryId], references: [id], onDelete: Restrict)
+  versions      DocumentVersion[]
+
+  @@index([assetId])
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id           String   @id @default(uuid()) @db.Uuid
+  documentId   String   @map("document_id") @db.Uuid
+  version      Int
+  fileId       String   @map("file_id") @db.Uuid
+  isCurrent    Boolean  @default(true) @map("is_current")
+  uploadedById String?  @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  document Document   @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  file     StoredFile @relation(fields: [fileId], references: [id], onDelete: Restrict)
+
+  @@unique([documentId, version])
+  @@map("document_versions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Assets
+// ─────────────────────────────────────────────────────────────
+
+model Asset {
+  id                    String           @id @default(uuid()) @db.Uuid
+  assetNumber           String           @unique @map("asset_number")
+  name                  String
+  mainCategory          MainCategoryCode @map("main_category")
+  subcategoryId         String           @map("subcategory_id") @db.Uuid
+  serialNumber          String           @unique @map("serial_number")
+  serialIsInternal      Boolean          @default(false) @map("serial_is_internal")
+  qrToken               String           @unique @map("qr_token")
+  locationId            String           @map("location_id") @db.Uuid
+  departmentId          String           @map("department_id") @db.Uuid
+  responsibleEmployeeId String?          @map("responsible_employee_id") @db.Uuid
+  responsibleExternalId String?          @map("responsible_external_id") @db.Uuid
+  status                AssetStatus      @default(NEW)
+  notes                 String?
+
+  // Purchase (optional, no automatic currency conversion)
+  purchaseDate     DateTime? @map("purchase_date") @db.Date
+  supplier         String?
+  invoiceNumber    String?   @map("invoice_number")
+  purchaseValue    Decimal?  @map("purchase_value") @db.Decimal(18, 2)
+  purchaseCurrency String?   @map("purchase_currency") @db.VarChar(3)
+
+  // Warranty
+  warrantyExists    Boolean   @default(false) @map("warranty_exists")
+  warrantyExpiresAt DateTime? @map("warranty_expires_at") @db.Date
+  warrantyDetails   String?   @map("warranty_details")
+
+  /// Optimistic concurrency token; incremented on every write.
+  version     Int      @default(1)
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  category            MainCategory       @relation(fields: [mainCategory], references: [code], onDelete: Restrict)
+  subcategory         Subcategory        @relation(fields: [subcategoryId, mainCategory], references: [id, mainCategory], onDelete: Restrict)
+  locationDepartment  LocationDepartment @relation(fields: [locationId, departmentId], references: [locationId, departmentId], onDelete: Restrict)
+  responsibleEmployee Employee?          @relation("AssetResponsibleEmployee", fields: [responsibleEmployeeId], references: [id], onDelete: Restrict)
+  responsibleExternal ExternalPerson?    @relation("AssetResponsibleExternal", fields: [responsibleExternalId], references: [id], onDelete: Restrict)
+  currency            Currency?          @relation(fields: [purchaseCurrency], references: [code], onDelete: Restrict)
+
+  technical          AssetTechnicalDetails?
+  realEstate         AssetRealEstateDetails?
+  numberHistory      AssetNumberHistory[]
+  serialHistory      SerialNumberHistory[]
+  events             AssetEvent[]
+  photos             AssetPhoto[]
+  documents          Document[]
+  transfers          Transfer[]
+  custodyItems       CustodyItem[]
+  custodyReturnItems CustodyReturnItem[]
+  maintenances       Maintenance[]
+  sale               Sale?
+  inventoryItems     InventoryItem[]
+
+  @@index([status])
+  @@index([locationId, departmentId])
+  @@index([mainCategory, subcategoryId])
+  @@index([responsibleEmployeeId])
+  @@index([responsibleExternalId])
+  @@map("assets")
+}
+
+model AssetTechnicalDetails {
+  assetId         String   @id @map("asset_id") @db.Uuid
+  manufacturer    String?
+  model           String?
+  macAddress      String?  @map("mac_address")
+  ipAddress       String?  @map("ip_address")
+  operatingSystem String?  @map("operating_system")
+  specifications  String?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@index([macAddress])
+  @@index([ipAddress])
+  @@map("asset_technical_details")
+}
+
+model AssetRealEstateDetails {
+  assetId        String    @id @map("asset_id") @db.Uuid
+  propertyType   String?   @map("property_type")
+  propertyName   String?   @map("property_name")
+  locationText   String?   @map("location_text")
+  area           Decimal?  @db.Decimal(14, 2)
+  propertyNumber String?   @map("property_number")
+  parcelNumber   String?   @map("parcel_number")
+  ownershipDeed  String?   @map("ownership_deed")
+  ownershipDate  DateTime? @map("ownership_date") @db.Date
+  ownershipNotes String?   @map("ownership_notes")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@map("asset_real_estate_details")
+}
+
+/// Every asset number ever assigned (current one included). The UNIQUE on
+/// asset_number guarantees a number is never reused, even after a category
+/// change.
+model AssetNumberHistory {
+  id           String           @id @default(uuid()) @db.Uuid
+  assetId      String           @map("asset_id") @db.Uuid
+  assetNumber  String           @unique @map("asset_number")
+  mainCategory MainCategoryCode @map("main_category")
+  assignedAt   DateTime         @default(now()) @map("assigned_at") @db.Timestamptz(3)
+  retiredAt    DateTime?        @map("retired_at") @db.Timestamptz(3)
+  actorId      String?          @map("actor_id") @db.Uuid
+  reason       String?
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@index([assetId])
+  @@map("asset_number_history")
+}
+
+model SerialNumberHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  assetId   String   @map("asset_id") @db.Uuid
+  oldSerial String   @map("old_serial")
+  newSerial String   @map("new_serial")
+  actorId   String?  @map("actor_id") @db.Uuid
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@index([assetId])
+  @@map("serial_number_history")
+}
+
+/// Asset History timeline (spec §22). Logically separate from AuditLog.
+/// Append-only: UPDATE/DELETE blocked by trigger.
+model AssetEvent {
+  id            BigInt         @id @default(autoincrement())
+  assetId       String         @map("asset_id") @db.Uuid
+  type          AssetEventType
+  actorId       String?        @map("actor_id") @db.Uuid
+  operationType String?        @map("operation_type")
+  operationId   String?        @map("operation_id") @db.Uuid
+  summary       Json           @default("{}")
+  snapshot      Json?
+  occurredAt    DateTime       @default(now()) @map("occurred_at") @db.Timestamptz(3)
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@index([assetId, occurredAt])
+  @@map("asset_events")
+}
+
+model AssetPhoto {
+  id          String    @id @default(uuid()) @db.Uuid
+  assetId     String    @map("asset_id") @db.Uuid
+  fileId      String    @map("file_id") @db.Uuid
+  isMain      Boolean   @default(false) @map("is_main")
+  addedById   String?   @map("added_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  removedAt   DateTime? @map("removed_at") @db.Timestamptz(3)
+  removedById String?   @map("removed_by_id") @db.Uuid
+
+  asset Asset      @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  file  StoredFile @relation(fields: [fileId], references: [id], onDelete: Restrict)
+
+  // Partial unique index (one active main photo per asset) is in SQL.
+  @@index([assetId])
+  @@map("asset_photos")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Operations
+// ─────────────────────────────────────────────────────────────
+
+/// Transfer changes location/department only — never the responsible person.
+model Transfer {
+  id               String   @id @default(uuid()) @db.Uuid
+  number           String   @unique
+  assetId          String   @map("asset_id") @db.Uuid
+  fromLocationId   String   @map("from_location_id") @db.Uuid
+  fromDepartmentId String   @map("from_department_id") @db.Uuid
+  toLocationId     String   @map("to_location_id") @db.Uuid
+  toDepartmentId   String   @map("to_department_id") @db.Uuid
+  notes            String?
+  actorId          String   @map("actor_id") @db.Uuid
+  occurredAt       DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
+
+  asset          Asset      @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  fromLocation   Location   @relation("TransferFromLocation", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  fromDepartment Department @relation("TransferFromDepartment", fields: [fromDepartmentId], references: [id], onDelete: Restrict)
+  toLocation     Location   @relation("TransferToLocation", fields: [toLocationId], references: [id], onDelete: Restrict)
+  toDepartment   Department @relation("TransferToDepartment", fields: [toDepartmentId], references: [id], onDelete: Restrict)
+  documents      Document[]
+
+  @@index([assetId])
+  @@map("transfers")
+}
+
+model Custody {
+  id                       String        @id @default(uuid()) @db.Uuid
+  number                   String        @unique
+  status                   CustodyStatus @default(PENDING)
+  newResponsibleEmployeeId String?       @map("new_responsible_employee_id") @db.Uuid
+  newResponsibleExternalId String?       @map("new_responsible_external_id") @db.Uuid
+  notes                    String?
+  createdById              String        @map("created_by_id") @db.Uuid
+  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  confirmedAt              DateTime?     @map("confirmed_at") @db.Timestamptz(3)
+  confirmedById            String?       @map("confirmed_by_id") @db.Uuid
+  rejectedAt               DateTime?     @map("rejected_at") @db.Timestamptz(3)
+  rejectedById             String?       @map("rejected_by_id") @db.Uuid
+  rejectionReason          String?       @map("rejection_reason")
+  cancelledAt              DateTime?     @map("cancelled_at") @db.Timestamptz(3)
+  cancelledById            String?       @map("cancelled_by_id") @db.Uuid
+  cancellationReason       String?       @map("cancellation_reason")
+
+  newResponsibleEmployee Employee?       @relation("CustodyNewResponsibleEmployee", fields: [newResponsibleEmployeeId], references: [id], onDelete: Restrict)
+  newResponsibleExternal ExternalPerson? @relation("CustodyNewResponsibleExternal", fields: [newResponsibleExternalId], references: [id], onDelete: Restrict)
+  items                  CustodyItem[]
+  documents              Document[]
+
+  @@index([status])
+  @@map("custodies")
+}
+
+model CustodyItem {
+  id                            String      @id @default(uuid()) @db.Uuid
+  custodyId                     String      @map("custody_id") @db.Uuid
+  assetId                       String      @map("asset_id") @db.Uuid
+  /// true while the parent custody is PENDING. A partial unique index on
+  /// (asset_id) WHERE is_pending prevents double custody.
+  isPending                     Boolean     @default(true) @map("is_pending")
+  conditionAtHandover           AssetStatus @map("condition_at_handover")
+  notes                         String?
+  previousResponsibleEmployeeId String?     @map("previous_responsible_employee_id") @db.Uuid
+  previousResponsibleExternalId String?     @map("previous_responsible_external_id") @db.Uuid
+  assetSnapshot                 Json        @map("asset_snapshot")
+
+  custody                     Custody         @relation(fields: [custodyId], references: [id], onDelete: Restrict)
+  asset                       Asset           @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  previousResponsibleEmployee Employee?       @relation("CustodyItemPreviousEmployee", fields: [previousResponsibleEmployeeId], references: [id], onDelete: Restrict)
+  previousResponsibleExternal ExternalPerson? @relation("CustodyItemPreviousExternal", fields: [previousResponsibleExternalId], references: [id], onDelete: Restrict)
+
+  @@unique([custodyId, assetId])
+  @@index([assetId])
+  @@map("custody_items")
+}
+
+model CustodyReturn {
+  id         String   @id @default(uuid()) @db.Uuid
+  number     String   @unique
+  notes      String?
+  actorId    String   @map("actor_id") @db.Uuid
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
+
+  items     CustodyReturnItem[]
+  documents Document[]
+
+  @@map("custody_returns")
+}
+
+model CustodyReturnItem {
+  id                            String      @id @default(uuid()) @db.Uuid
+  custodyReturnId               String      @map("custody_return_id") @db.Uuid
+  assetId                       String      @map("asset_id") @db.Uuid
+  conditionAtReturn             AssetStatus @map("condition_at_return")
+  notes                         String?
+  previousResponsibleEmployeeId String?     @map("previous_responsible_employee_id") @db.Uuid
+  previousResponsibleExternalId String?     @map("previous_responsible_external_id") @db.Uuid
+  newResponsibleEmployeeId      String?     @map("new_responsible_employee_id") @db.Uuid
+  newResponsibleExternalId      String?     @map("new_responsible_external_id") @db.Uuid
+  assetSnapshot                 Json        @map("asset_snapshot")
+
+  custodyReturn               CustodyReturn   @relation(fields: [custodyReturnId], references: [id], onDelete: Restrict)
+  asset                       Asset           @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  newResponsibleEmployee      Employee?       @relation("ReturnNewResponsibleEmployee", fields: [newResponsibleEmployeeId], references: [id], onDelete: Restrict)
+  newResponsibleExternal      ExternalPerson? @relation("ReturnNewResponsibleExternal", fields: [newResponsibleExternalId], references: [id], onDelete: Restrict)
+  previousResponsibleEmployee Employee?       @relation("ReturnItemPreviousEmployee", fields: [previousResponsibleEmployeeId], references: [id], onDelete: Restrict)
+  previousResponsibleExternal ExternalPerson? @relation("ReturnItemPreviousExternal", fields: [previousResponsibleExternalId], references: [id], onDelete: Restrict)
+
+  @@unique([custodyReturnId, assetId])
+  @@index([assetId])
+  @@map("custody_return_items")
+}
+
+/// A sale is final. UNIQUE(asset_id) makes a double sale impossible.
+model Sale {
+  id               String      @id @default(uuid()) @db.Uuid
+  number           String      @unique
+  assetId          String      @unique @map("asset_id") @db.Uuid
+  saleDate         DateTime    @map("sale_date") @db.Date
+  saleValue        Decimal     @map("sale_value") @db.Decimal(18, 2)
+  currency         String      @db.VarChar(3)
+  buyerName        String      @map("buyer_name")
+  buyerType        String      @map("buyer_type")
+  referenceNumber  String?     @map("reference_number")
+  notes            String?
+  statusBeforeSale AssetStatus @map("status_before_sale")
+  assetSnapshot    Json        @map("asset_snapshot")
+  actorId          String      @map("actor_id") @db.Uuid
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  asset       Asset      @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  currencyRef Currency   @relation(fields: [currency], references: [code], onDelete: Restrict)
+  documents   Document[]
+
+  @@map("sales")
+}
+
+model Maintenance {
+  id                      String            @id @default(uuid()) @db.Uuid
+  number                  String            @unique
+  assetId                 String            @map("asset_id") @db.Uuid
+  status                  MaintenanceStatus @default(NEW)
+  technicianType          TechnicianType    @map("technician_type")
+  technicianEmployeeId    String?           @map("technician_employee_id") @db.Uuid
+  providerId              String?           @map("provider_id") @db.Uuid
+  startDate               DateTime?         @map("start_date") @db.Timestamptz(3)
+  endDate                 DateTime?         @map("end_date") @db.Timestamptz(3)
+  cost                    Decimal?          @db.Decimal(18, 2)
+  currency                String?           @db.VarChar(3)
+  beforePhotoId           String            @map("before_photo_id") @db.Uuid
+  afterPhotoId            String?           @map("after_photo_id") @db.Uuid
+  whatWasRepaired         String?           @map("what_was_repaired")
+  statusBeforeMaintenance AssetStatus       @map("status_before_maintenance")
+  resultingStatus         AssetStatus?      @map("resulting_status")
+  version                 Int               @default(1)
+  createdById             String            @map("created_by_id") @db.Uuid
+  createdAt               DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  closedAt                DateTime?         @map("closed_at") @db.Timestamptz(3)
+  closedById              String?           @map("closed_by_id") @db.Uuid
+
+  asset              Asset                @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  technicianEmployee Employee?            @relation("MaintenanceTechnicianEmployee", fields: [technicianEmployeeId], references: [id], onDelete: Restrict)
+  provider           MaintenanceProvider? @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  currencyRef        Currency?            @relation(fields: [currency], references: [code], onDelete: Restrict)
+  beforePhoto        StoredFile           @relation("MaintenanceBeforePhoto", fields: [beforePhotoId], references: [id], onDelete: Restrict)
+  afterPhoto         StoredFile?          @relation("MaintenanceAfterPhoto", fields: [afterPhotoId], references: [id], onDelete: Restrict)
+  documents          Document[]
+
+  @@index([assetId])
+  @@index([status])
+  @@map("maintenances")
+}
+
+model Inventory {
+  id          String          @id @default(uuid()) @db.Uuid
+  number      String          @unique
+  status      InventoryStatus @default(IN_PROGRESS)
+  notes       String?
+  createdById String          @map("created_by_id") @db.Uuid
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  closedAt    DateTime?       @map("closed_at") @db.Timestamptz(3)
+  closedById  String?         @map("closed_by_id") @db.Uuid
+  version     Int             @default(1)
+
+  scopes       InventoryScope[]
+  items        InventoryItem[]
+  unregistered InventoryUnregisteredAsset[]
+  reopenings   InventoryReopening[]
+  documents    Document[]
+
+  @@index([status])
+  @@map("inventories")
+}
+
+/// Inventory scope row: a location, optionally narrowed to one department.
+model InventoryScope {
+  id           String  @id @default(uuid()) @db.Uuid
+  inventoryId  String  @map("inventory_id") @db.Uuid
+  locationId   String? @map("location_id") @db.Uuid
+  departmentId String? @map("department_id") @db.Uuid
+
+  inventory  Inventory   @relation(fields: [inventoryId], references: [id], onDelete: Restrict)
+  location   Location?   @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+
+  @@index([inventoryId])
+  @@map("inventory_scopes")
+}
+
+/// One expected asset in an inventory. Expected values are frozen at
+/// creation; actual values are recorded when checked.
+model InventoryItem {
+  id                            String       @id @default(uuid()) @db.Uuid
+  inventoryId                   String       @map("inventory_id") @db.Uuid
+  assetId                       String       @map("asset_id") @db.Uuid
+  expectedLocationId            String       @map("expected_location_id") @db.Uuid
+  expectedDepartmentId          String       @map("expected_department_id") @db.Uuid
+  expectedResponsibleEmployeeId String?      @map("expected_responsible_employee_id") @db.Uuid
+  expectedResponsibleExternalId String?      @map("expected_responsible_external_id") @db.Uuid
+  expectedStatus                AssetStatus  @map("expected_status")
+  checkedAt                     DateTime?    @map("checked_at") @db.Timestamptz(3)
+  checkedById                   String?      @map("checked_by_id") @db.Uuid
+  exists                        Boolean?
+  confirmedByQr                 Boolean      @default(false) @map("confirmed_by_qr")
+  actualLocationId              String?      @map("actual_location_id") @db.Uuid
+  actualDepartmentId            String?      @map("actual_department_id") @db.Uuid
+  actualResponsibleEmployeeId   String?      @map("actual_responsible_employee_id") @db.Uuid
+  actualResponsibleExternalId   String?      @map("actual_responsible_external_id") @db.Uuid
+  actualStatus                  AssetStatus? @map("actual_status")
+  notes                         String?
+  photoId                       String?      @map("photo_id") @db.Uuid
+  reconciledAt                  DateTime?    @map("reconciled_at") @db.Timestamptz(3)
+  /// Found, but location, department, responsible or status differ from the expected values.
+  hasDiscrepancy                Boolean      @default(false) @map("has_discrepancy")
+
+  inventory                   Inventory       @relation(fields: [inventoryId], references: [id], onDelete: Restrict)
+  asset                       Asset           @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  photo                       StoredFile?     @relation(fields: [photoId], references: [id], onDelete: Restrict)
+  actualResponsibleEmployee   Employee?       @relation("InventoryActualResponsibleEmployee", fields: [actualResponsibleEmployeeId], references: [id], onDelete: Restrict)
+  actualResponsibleExternal   ExternalPerson? @relation("InventoryActualResponsibleExternal", fields: [actualResponsibleExternalId], references: [id], onDelete: Restrict)
+  expectedResponsibleEmployee Employee?       @relation("InventoryExpectedResponsibleEmployee", fields: [expectedResponsibleEmployeeId], references: [id], onDelete: Restrict)
+  expectedResponsibleExternal ExternalPerson? @relation("InventoryExpectedResponsibleExternal", fields: [expectedResponsibleExternalId], references: [id], onDelete: Restrict)
+  expectedLocation            Location        @relation("InventoryExpectedLocation", fields: [expectedLocationId], references: [id], onDelete: Restrict)
+  expectedDepartment          Department      @relation("InventoryExpectedDepartment", fields: [expectedDepartmentId], references: [id], onDelete: Restrict)
+  actualLocation              Location?       @relation("InventoryActualLocation", fields: [actualLocationId], references: [id], onDelete: Restrict)
+  actualDepartment            Department?     @relation("InventoryActualDepartment", fields: [actualDepartmentId], references: [id], onDelete: Restrict)
+
+  @@unique([inventoryId, assetId])
+  @@index([inventoryId, checkedAt])
+  @@map("inventory_items")
+}
+
+/// "أصل غير مسجل" found during inventory. No asset is created automatically.
+model InventoryUnregisteredAsset {
+  id           String   @id @default(uuid()) @db.Uuid
+  inventoryId  String   @map("inventory_id") @db.Uuid
+  description  String
+  scannedCode  String?  @map("scanned_code")
+  locationId   String?  @map("location_id") @db.Uuid
+  departmentId String?  @map("department_id") @db.Uuid
+  notes        String?
+  photoId      String?  @map("photo_id") @db.Uuid
+  recordedById String   @map("recorded_by_id") @db.Uuid
+  recordedAt   DateTime @default(now()) @map("recorded_at") @db.Timestamptz(3)
+
+  inventory  Inventory   @relation(fields: [inventoryId], references: [id], onDelete: Restrict)
+  photo      StoredFile? @relation(fields: [photoId], references: [id], onDelete: Restrict)
+  location   Location?   @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+
+  @@index([inventoryId])
+  @@map("inventory_unregistered_assets")
+}
+
+model InventoryReopening {
+  id          String   @id @default(uuid()) @db.Uuid
+  inventoryId String   @map("inventory_id") @db.Uuid
+  reason      String
+  actorId     String   @map("actor_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Restrict)
+
+  @@index([inventoryId])
+  @@map("inventory_reopenings")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Notifications, searches, offline sync
+// ─────────────────────────────────────────────────────────────
+
+model NotificationType {
+  key       String  @id
+  label     String
+  isEnabled Boolean @default(true) @map("is_enabled")
+
+  recipients    NotificationRecipient[]
+  notifications Notification[]
+
+  @@map("notification_types")
+}
+
+/// Configurable recipients: a role, a specific user, or the entity's
+/// responsible person (targetResponsible = true).
+model NotificationRecipient {
+  id                String  @id @default(uuid()) @db.Uuid
+  typeKey           String  @map("type_key")
+  roleId            String? @map("role_id") @db.Uuid
+  userId            String? @map("user_id") @db.Uuid
+  targetResponsible Boolean @default(false) @map("target_responsible")
+
+  type NotificationType @relation(fields: [typeKey], references: [key], onDelete: Cascade)
+  role Role?            @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@map("notification_recipients")
+}
+
+/// Users cannot delete notifications (no DELETE endpoint; trigger blocks it).
+model Notification {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  typeKey    String    @map("type_key")
+  title      String
+  body       String?
+  entityType String?   @map("entity_type")
+  entityId   String?   @map("entity_id")
+  readAt     DateTime? @map("read_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  type NotificationType @relation(fields: [typeKey], references: [key], onDelete: Restrict)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model SavedSearch {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  name      String
+  scope     String
+  filters   Json
+  columns   Json?
+  sort      Json?
+  isShared  Boolean  @default(false) @map("is_shared")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner  User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  shares SavedSearchShare[]
+
+  @@index([ownerId, scope])
+  @@map("saved_searches")
+}
+
+model SavedSearchShare {
+  id            String  @id @default(uuid()) @db.Uuid
+  savedSearchId String  @map("saved_search_id") @db.Uuid
+  roleId        String? @map("role_id") @db.Uuid
+  userId        String? @map("user_id") @db.Uuid
+
+  savedSearch SavedSearch @relation(fields: [savedSearchId], references: [id], onDelete: Cascade)
+  role        Role?       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@map("saved_search_shares")
+}
+
+/// Server-side record of offline operations submitted by clients.
+/// clientOperationId makes submission idempotent across retries.
+model SyncOperation {
+  id                String              @id @default(uuid()) @db.Uuid
+  clientOperationId String              @unique @map("client_operation_id")
+  userId            String              @map("user_id") @db.Uuid
+  type              String
+  payload           Json
+  baseVersion       Int?                @map("base_version")
+  status            SyncOperationStatus @default(PENDING)
+  result            Json?
+  errorCode         String?             @map("error_code")
+  clientCreatedAt   DateTime            @map("client_created_at") @db.Timestamptz(3)
+  receivedAt        DateTime            @default(now()) @map("received_at") @db.Timestamptz(3)
+  processedAt       DateTime?           @map("processed_at") @db.Timestamptz(3)
+
+  @@index([userId, status])
+  @@map("sync_operations")
+}

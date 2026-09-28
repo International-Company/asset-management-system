@@ -1,0 +1,28 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Permission matrix (spec §82) > routes open to any signed-in user are only personal or self-checking ones 1`] = `
+[
+  "DELETE /api/v1/saved-searches/:id",
+  "GET /api/v1/auth/me",
+  "GET /api/v1/custodies/:id",
+  "GET /api/v1/custodies/pending-for-me",
+  "GET /api/v1/custody-returns/:id",
+  "GET /api/v1/files/:id",
+  "GET /api/v1/lookups/categories",
+  "GET /api/v1/lookups/currencies",
+  "GET /api/v1/lookups/locations",
+  "GET /api/v1/notifications",
+  "GET /api/v1/notifications/unread-count",
+  "GET /api/v1/saved-searches",
+  "GET /api/v1/security/sessions/mine",
+  "GET /api/v1/sync/operations",
+  "PATCH /api/v1/saved-searches/:id",
+  "POST /api/v1/auth/logout",
+  "POST /api/v1/custodies/:id/confirm",
+  "POST /api/v1/custodies/:id/reject",
+  "POST /api/v1/notifications/:id/read",
+  "POST /api/v1/notifications/read-all",
+  "POST /api/v1/saved-searches",
+  "POST /api/v1/sync/operations/:type",
+]
+`;

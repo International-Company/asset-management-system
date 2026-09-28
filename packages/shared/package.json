@@ -1,0 +1,20 @@
+{
+  "name": "@osooli/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared enums, permission keys and Arabic labels",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/esm/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json && node ./scripts/mark-cjs.mjs",
+    "typecheck": "tsc -p tsconfig.esm.json --noEmit"
+  }
+}

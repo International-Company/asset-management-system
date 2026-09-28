@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/dev-dist
+**/.env
+**/.env.*
+!**/.env.example
+**/storage-data
+apps/api/src/generated
+test-results
+playwright-report
+.git
