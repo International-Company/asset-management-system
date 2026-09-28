@@ -104,8 +104,10 @@ jobs:
           docker rm -f web
 
   deploy:
-    # Production deploy only from main, only after every check passed.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Production deploy only from main, only after every check passed. Used when
+    # deploying through the Railway CLI (variables below set). With Railway's
+    # GitHub integration instead, enable 'Wait for CI' there and leave them unset.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.RAILWAY_API_SERVICE != ''
     runs-on: ubuntu-latest
     needs: [verify, docker]
     environment: production

@@ -15,7 +15,8 @@ RUN npm run build -w @osooli/shared && npm run build -w @osooli/web
 
 FROM nginx:1.29-alpine AS runtime
 # API_UPSTREAM: internal URL of the API service, e.g. http://api.railway.internal:3000
-ENV API_UPSTREAM=http://api:3000 PORT=80
+# NGINX_ENTRYPOINT_LOCAL_RESOLVERS exposes the container DNS to the template (resolver).
+ENV API_UPSTREAM=http://api:3000 PORT=80 NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
 COPY apps/web/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY apps/web/security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
