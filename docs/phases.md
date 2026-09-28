@@ -71,7 +71,7 @@ The spec leaves these open; each is enforced by the API and tested.
 
 ## Open decisions (need input before production)
 
-1. **EAP integration contract (spec §88).** Endpoints, payloads, and how the company fingerprint mechanism returns its verification result. Until then `EapHttpProvider` refuses every call; development uses the mock provider.
+1. **EAP = Company Central Platform** (confirmed 2026-09-28). The integration is implemented: password via `/auth/login`, fingerprint via passkeys, employees via the machine API. Before production, the Platform needs a company domain shared with the Asset System, and its passkey relying party must be set (it is `localhost` today). See [deployment.md](deployment.md#eap-company-central-platform).
 2. **Object storage provider** for production (any S3-compatible service works).
 3. **"Inventory settings"** in spec §64 are not specified. Which settings are needed?
 4. **One open maintenance per asset.** The database enforces this to keep asset status consistent. Please confirm that is the intended rule.

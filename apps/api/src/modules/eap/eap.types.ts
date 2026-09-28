@@ -18,7 +18,16 @@ export interface EapEmployee {
 
 export type PasswordResult =
   | { ok: true; eapEmployeeId: string; providerRef: string | null }
-  | { ok: false };
+  | { ok: false; reason?: 'password_change_required' };
+
+/**
+ * What the browser needs for the fingerprint step. `webauthn`: ask the device
+ * for a passkey (the fingerprint stays on the device). `code`: the development
+ * mock, where a code stands in for the fingerprint.
+ */
+export type FingerprintOptions =
+  | { type: 'webauthn'; challenge: string; rpId: string; timeoutMs: number }
+  | { type: 'code' };
 
 export interface ProviderHealth {
   status: 'up' | 'down' | 'not_configured';
@@ -31,6 +40,9 @@ export interface EapProvider {
 
   /** Step 2: verify username + password against EAP. */
   verifyPassword(username: string, password: string): Promise<PasswordResult>;
+
+  /** Issued after step 2: how the browser should collect the fingerprint. */
+  fingerprintOptions(): Promise<FingerprintOptions>;
 
   /**
    * Step 3: verify the fingerprint assertion for the session started in

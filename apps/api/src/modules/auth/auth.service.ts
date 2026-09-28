@@ -4,7 +4,7 @@ import { AppError } from '../../common/errors/app-error';
 import type { ClientInfo } from '../../common/request-user';
 import { SettingsService } from '../settings/settings.service';
 import { SecurityLogService } from '../security/security-log.service';
-import { EAP_PROVIDER, EapProvider } from '../eap/eap.types';
+import { EAP_PROVIDER, EapProvider, type FingerprintOptions } from '../eap/eap.types';
 import { SessionService } from './session.service';
 
 const CHALLENGE_TTL_MS = 5 * 60_000;
@@ -40,13 +40,17 @@ export class AuthService {
   }
 
   /** Step 2. */
-  async verifyPassword(challengeId: string, password: string, client: ClientInfo): Promise<{ next: 'fingerprint' }> {
+  async verifyPassword(challengeId: string, password: string, client: ClientInfo): Promise<{ next: 'fingerprint'; fingerprint: FingerprintOptions }> {
     const challenge = await this.loadChallenge(challengeId, 'PASSWORD');
     const user = await this.prisma.user.findUnique({ where: { username: challenge.username } });
     await this.assertNotLocked(user, challenge.username, client);
 
     const result = await this.eap.verifyPassword(challenge.username, password);
     if (!result.ok) {
+      if (result.reason === 'password_change_required') {
+        // The password was right; EAP wants it changed before any sign-in.
+        throw new AppError('INVALID_STATE', 'يجب تغيير كلمة المرور في نظام EAP أولًا، ثم تسجيل الدخول من جديد.');
+      }
       await this.registerFailure(user, challenge.username, client, 'invalid_password');
       throw new AppError('INVALID_CREDENTIALS');
     }
@@ -72,7 +76,7 @@ export class AuthService {
       data: { step: 'FINGERPRINT', providerRef: result.providerRef },
     });
     if (advanced.count === 0) throw new AppError('SESSION_EXPIRED');
-    return { next: 'fingerprint' };
+    return { next: 'fingerprint', fingerprint: await this.eap.fingerprintOptions() };
   }
 
   /** Step 3: on success, creates the authenticated session. */

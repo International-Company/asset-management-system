@@ -5,7 +5,7 @@ be done before real company data enters the system.
 
 ## 1. Decisions and integrations
 
-- [ ] **Blocking — EAP integration (spec §88).** Receive the contract (endpoints, payloads, fingerprint verification flow) and implement `EapHttpProvider`. It currently refuses every call on purpose, and the mock provider is refused in staging/production, so nobody can sign in until this is done.
+- [ ] **Blocking — EAP (Company Central Platform).** The integration is implemented (see [deployment.md](deployment.md#eap-company-central-platform)). Still to do: register the application in the Platform and set `EAP_CLIENT_ID` / `EAP_CLIENT_SECRET`; move both systems under one company domain and set the Platform's passkey relying party and origins; make sure every user has a linked Platform account and a registered passkey.
 - [ ] **Blocking — object storage.** Create a private S3-compatible bucket, ideally with versioning, and set the `STORAGE_*` variables.
 - [ ] Confirm the rules recorded in [phases.md](phases.md) under "please confirm" (phases 3–7) and the remaining open decisions there.
 

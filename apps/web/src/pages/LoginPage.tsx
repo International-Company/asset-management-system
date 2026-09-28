@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Navigate, useLocation } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { type FingerprintOptions, getPasskeyAssertion, PasskeyCancelled, passkeysSupported } from '../lib/passkey';
 
 type Step = 'username' | 'password' | 'fingerprint';
 
@@ -27,6 +28,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [assertion, setAssertion] = useState('');
   const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [fingerprint, setFingerprint] = useState<FingerprintOptions | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -46,6 +48,7 @@ export function LoginPage() {
     setChallengeId(null);
     setPassword('');
     setAssertion('');
+    setFingerprint(null);
     setError(message ?? null);
   };
 
@@ -59,14 +62,21 @@ export function LoginPage() {
         setChallengeId(res.challengeId);
         setStep('password');
       } else if (step === 'password') {
-        await api('/auth/login/password', { method: 'POST', json: { challengeId, password } });
+        const res = await api<{ fingerprint: FingerprintOptions }>('/auth/login/password', { method: 'POST', json: { challengeId, password } });
         setPassword('');
+        setFingerprint(res.fingerprint);
         setStep('fingerprint');
       } else {
-        await api('/auth/login/fingerprint', { method: 'POST', json: { challengeId, assertion } });
+        // EAP: the device checks the fingerprint and signs EAP's challenge.
+        const signed = fingerprint?.type === 'webauthn' ? await getPasskeyAssertion(fingerprint) : assertion;
+        await api('/auth/login/fingerprint', { method: 'POST', json: { challengeId, assertion: signed } });
         await refresh();
       }
     } catch (err) {
+      if (err instanceof PasskeyCancelled) {
+        setError('لم يكتمل التحقق من البصمة. تأكد أن للجهاز مفتاح مرور (Passkey) مسجلًا في نظام EAP، ثم أعد المحاولة.');
+        return;
+      }
       const apiErr = err instanceof ApiError ? err : null;
       if (apiErr?.code === 'SESSION_EXPIRED' || apiErr?.code === 'ACCOUNT_LOCKED' || apiErr?.code === 'FORBIDDEN') {
         restart(apiErr.message);
@@ -82,7 +92,9 @@ export function LoginPage() {
   }
 
   const companyName = config.data?.company.nameAr;
-  const isMock = config.data?.authProvider === 'mock';
+  const usesCode = fingerprint?.type === 'code';
+  const usesPasskey = fingerprint?.type === 'webauthn';
+  const canSubmitFingerprint = usesCode ? !!assertion : usesPasskey && passkeysSupported();
 
   return (
     <div className="center-page">
@@ -152,8 +164,7 @@ export function LoginPage() {
 
           {step === 'fingerprint' && (
             <>
-              <p>يرجى إتمام التحقق من البصمة عبر جهاز البصمة المعتمد في الشركة.</p>
-              {isMock ? (
+              {usesCode ? (
                 <div className="field">
                   <label htmlFor="assertion">رمز محاكاة البصمة</label>
                   <input
@@ -168,10 +179,10 @@ export function LoginPage() {
                   />
                   <span className="hint">بيئة التطوير: مزود المصادقة التجريبي يحاكي خطوة البصمة.</span>
                 </div>
+              ) : passkeysSupported() ? (
+                <p>اضغط «التحقق بالبصمة» ثم ضع إصبعك على مستشعر البصمة في جهازك. تبقى البصمة على الجهاز ولا تُرسل إلى أي خادم.</p>
               ) : (
-                <div className="alert alert-warning">
-                  آلية البصمة عبر EAP لم تُهيأ بعد. يرجى التواصل مع مدير النظام.
-                </div>
+                <div className="alert alert-warning">هذا المتصفح لا يدعم الدخول بالبصمة (Passkey). استخدم متصفحًا حديثًا على جهاز فيه مستشعر بصمة.</div>
               )}
             </>
           )}
@@ -179,9 +190,9 @@ export function LoginPage() {
           <button
             type="submit"
             className="btn btn-primary btn-block"
-            disabled={busy || (step === 'fingerprint' && !isMock)}
+            disabled={busy || (step === 'fingerprint' && !canSubmitFingerprint)}
           >
-            {busy ? 'جارٍ التحقق…' : step === 'fingerprint' ? 'دخول' : 'متابعة'}
+            {busy ? 'جارٍ التحقق…' : step === 'fingerprint' ? (usesPasskey ? 'التحقق بالبصمة' : 'دخول') : 'متابعة'}
           </button>
         </form>
       </div>

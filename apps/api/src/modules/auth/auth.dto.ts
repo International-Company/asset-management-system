@@ -21,9 +21,9 @@ export class LoginFingerprintDto {
   @IsUUID()
   challengeId: string;
 
-  /** Opaque assertion from the company/EAP fingerprint mechanism. */
+  /** Mock: the code. EAP: the passkey assertion as JSON (base64url fields). */
   @IsString()
   @IsNotEmpty()
-  @MaxLength(4096)
+  @MaxLength(8192)
   assertion: string;
 }
