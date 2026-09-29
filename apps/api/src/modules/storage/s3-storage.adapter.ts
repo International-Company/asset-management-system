@@ -15,12 +15,13 @@ export class S3StorageAdapter implements StorageAdapter {
 
   constructor(
     private readonly bucket: string,
-    config: { endpoint?: string; region?: string; accessKeyId: string; secretAccessKey: string },
+    config: { endpoint?: string; region?: string; accessKeyId: string; secretAccessKey: string; urlStyle?: 'path' | 'virtual-host' },
   ) {
     this.client = new S3Client({
       region: config.region ?? 'us-east-1',
       endpoint: config.endpoint || undefined,
-      forcePathStyle: !!config.endpoint,
+      // Path style suits MinIO; managed services (e.g. Railway buckets) want virtual-host.
+      forcePathStyle: config.urlStyle ? config.urlStyle === 'path' : !!config.endpoint,
       credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
     });
   }

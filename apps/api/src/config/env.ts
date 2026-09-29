@@ -29,6 +29,8 @@ export const envSchema = z
     STORAGE_BUCKET: z.string().optional(),
     STORAGE_ACCESS_KEY: z.string().optional(),
     STORAGE_SECRET_KEY: z.string().optional(),
+    /** Addressing style; default: path when STORAGE_ENDPOINT is set (MinIO), virtual-host otherwise. */
+    STORAGE_URL_STYLE: z.enum(['path', 'virtual-host']).optional(),
 
     ENCRYPTION_KEY: z.string().min(32),
 

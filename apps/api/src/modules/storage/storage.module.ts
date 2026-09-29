@@ -20,6 +20,7 @@ import { STORAGE_ADAPTER, StorageAdapter } from './storage.types';
               region: env.STORAGE_REGION,
               accessKeyId: env.STORAGE_ACCESS_KEY!,
               secretAccessKey: env.STORAGE_SECRET_KEY!,
+              urlStyle: env.STORAGE_URL_STYLE,
             }),
     },
     StorageService,
