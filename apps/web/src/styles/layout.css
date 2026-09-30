@@ -95,25 +95,97 @@
   margin-inline-end: 0.5rem;
   object-fit: contain;
 }
+/* Sidebar navigation: collapsible groups (one-item groups are plain links). */
 .nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.nav-list {
   list-style: none;
   margin: 0;
-  padding: 0.5rem;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.nav-section {
-  padding: 0.75rem 0.75rem 0.25rem;
-  font-size: 0.8rem;
-  color: var(--text-muted);
+.nav-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+.nav-group-toggle:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+.nav-group-toggle:focus-visible,
+.nav a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.nav-group-title {
+  flex: 1;
   white-space: nowrap;
+}
+/* The page you are on lives in this closed group. */
+.nav-group-dot {
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+/* Chevron: points to the reading end (left in RTL) when closed, down when open. */
+.nav-group-chevron {
+  inline-size: 0.42rem;
+  block-size: 0.42rem;
+  border-left: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  color: var(--text-muted);
+  transform: rotate(45deg);
+  transition: transform 0.2s ease;
+  margin-inline-end: 0.15rem;
+}
+.nav-group[data-open='true'] .nav-group-chevron {
+  transform: rotate(-45deg);
+}
+/* Height animates through grid rows (0fr ↔ 1fr), so no fixed heights are needed. */
+.nav-group-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.2s ease;
+}
+.nav-group[data-open='true'] .nav-group-body {
+  grid-template-rows: 1fr;
+}
+.nav-group-body > .nav-list {
+  min-block-size: 0;
+  overflow: hidden;
+  margin-inline-start: 1.05rem;
+  padding-inline-start: 0.4rem;
+  border-inline-start: 1px solid var(--border);
+}
+.nav-group[data-open='true'] .nav-group-body > .nav-list {
+  padding-block: 0.15rem 0.35rem;
 }
 .nav a {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.5rem 0.75rem;
+  padding: 0.45rem 0.75rem;
   border-radius: var(--radius);
   color: var(--text);
   text-decoration: none;
@@ -127,6 +199,25 @@
   color: var(--primary);
   font-weight: 600;
 }
+/* Top-level entries (group headings and one-item groups) share one level; items inside a group sit one step lighter. */
+.nav-single a {
+  font-size: 0.92rem;
+  font-weight: 600;
+  padding-block: 0.55rem;
+}
+.nav-group-body a {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+.nav-group-body a:hover {
+  color: var(--text);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-group-body,
+  .nav-group-chevron {
+    transition: none;
+  }
+}
 .nav-abbr {
   display: none;
   inline-size: 2rem;
@@ -134,12 +225,22 @@
   font-weight: 600;
 }
 .shell[data-collapsed='true'] .nav-label,
-.shell[data-collapsed='true'] .nav-section,
 .shell[data-collapsed='true'] .sidebar-brand span {
   display: none;
 }
 .shell[data-collapsed='true'] .nav-abbr {
   display: inline-block;
+}
+.shell[data-collapsed='true'] .nav-group-toggle {
+  display: none;
+}
+.shell[data-collapsed='true'] .nav-group-body {
+  grid-template-rows: 1fr;
+}
+.shell[data-collapsed='true'] .nav-group-body > .nav-list {
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 main.content {
@@ -178,12 +279,22 @@ main.content {
     transform: none;
   }
   .shell[data-collapsed='true'] .nav-label,
-  .shell[data-collapsed='true'] .nav-section,
   .shell[data-collapsed='true'] .sidebar-brand span {
     display: revert;
   }
   .shell[data-collapsed='true'] .nav-abbr {
     display: none;
+  }
+  .shell[data-collapsed='true'] .nav-group-toggle {
+    display: flex;
+  }
+  .shell[data-collapsed='true'] .nav-group:not([data-open='true']) .nav-group-body {
+    grid-template-rows: 0fr;
+  }
+  .shell[data-collapsed='true'] .nav-group-body > .nav-list {
+    margin-inline-start: 1.05rem;
+    padding-inline-start: 0.4rem;
+    border-inline-start: 1px solid var(--border);
   }
   .drawer-backdrop {
     position: fixed;

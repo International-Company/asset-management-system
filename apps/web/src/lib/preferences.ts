@@ -58,3 +58,42 @@ export function useOnline(): boolean {
   }, []);
   return online;
 }
+
+/**
+ * Which sidebar groups are open, remembered per device. A group with no
+ * saved choice follows `fallback` (open when it holds the current page).
+ */
+export function useNavGroups(): [(title: string, fallback: boolean) => boolean, (title: string, open: boolean) => void] {
+  const [state, setState] = useState<Record<string, boolean>>(() => {
+    try {
+      const parsed = JSON.parse(read('osooli.navGroups') ?? '{}') as unknown;
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, boolean>) : {};
+    } catch {
+      return {};
+    }
+  });
+  const isOpen = useCallback((title: string, fallback: boolean) => state[title] ?? fallback, [state]);
+  const setOpen = useCallback((title: string, open: boolean) => {
+    setState((prev) => {
+      if (prev[title] === open) return prev;
+      const next = { ...prev, [title]: open };
+      write('osooli.navGroups', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+  return [isOpen, setOpen];
+}
+
+/** Whether a media query matches, kept in sync with the window. */
+export function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => window.matchMedia?.(query).matches ?? false);
+  useEffect(() => {
+    const mq = window.matchMedia?.(query);
+    if (!mq) return;
+    const update = () => setMatches(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, [query]);
+  return matches;
+}

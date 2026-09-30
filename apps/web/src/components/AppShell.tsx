@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { PERMISSIONS, type PermissionKey } from '@osooli/shared';
 import { fileUrl } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { useOnline, useSidebarCollapsed, useTheme } from '../lib/preferences';
+import { useMediaQuery, useNavGroups, useOnline, useSidebarCollapsed, useTheme } from '../lib/preferences';
 import { useUnreadCount } from '../pages/NotificationsPage';
 import { useQueueCounts } from '../pages/offline/OfflinePages';
 import { useAutoSync } from '../offline/sync';
@@ -75,6 +75,47 @@ export const NAV: NavSection[] = [
   },
 ];
 
+function isActive(to: string, pathname: string): boolean {
+  return to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`);
+}
+
+function NavItem({ item }: { item: NavItem }) {
+  return (
+    <li>
+      <NavLink to={item.to} end={item.to === '/'} title={item.label}>
+        <span className="nav-abbr" aria-hidden="true">
+          {item.abbr}
+        </span>
+        <span className="nav-label">{item.label}</span>
+      </NavLink>
+    </li>
+  );
+}
+
+/**
+ * A sidebar group that folds open and closed. Closed items are `inert`: out of
+ * the tab order and hidden from screen readers, not merely clipped.
+ */
+function NavGroup({ section, active, open, flat, onToggle }: { section: NavSection; active: boolean; open: boolean; flat: boolean; onToggle: (open: boolean) => void }) {
+  const id = useId();
+  return (
+    <div className="nav-group" data-open={open}>
+      <button type="button" className="nav-group-toggle" aria-expanded={open} aria-controls={id} onClick={() => onToggle(!open)}>
+        <span className="nav-group-title">{section.title}</span>
+        {active && !open && <span className="nav-group-dot" aria-label="تحتوي الصفحة الحالية" />}
+        <span className="nav-group-chevron" aria-hidden="true" />
+      </button>
+      <div className="nav-group-body" id={id} inert={!open && !flat}>
+        <ul className="nav-list">
+          {section.items.map((item) => (
+            <NavItem key={item.to} item={item} />
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 export function AppShell() {
   const { me, can, logout } = useAuth();
   const [collapsed, setCollapsed] = useSidebarCollapsed();
@@ -86,6 +127,15 @@ export function AppShell() {
   const unread = useUnreadCount();
   const unreadCount = unread.data?.count ?? 0;
   const location = useLocation();
+  const [isGroupOpen, setGroupOpen] = useNavGroups();
+  const narrow = useMediaQuery('(max-width: 900px)');
+  // Collapsed desktop sidebar lists every item as a shortcut, without groups.
+  const flatNav = collapsed && !narrow;
+  // Opening a page from elsewhere (a link, the address bar) opens its group.
+  useEffect(() => {
+    const group = NAV.find((s) => s.items.length > 1 && s.items.some((i) => isActive(i.to, location.pathname)));
+    if (group) setGroupOpen(group.title, true);
+  }, [location.pathname, setGroupOpen]);
   useAutoSync(me?.id);
   const queue = useQueueCounts();
   const unsynced = queue.pending + queue.review;
@@ -118,22 +168,24 @@ export function AppShell() {
           {me?.company.logoFileId && <img src={fileUrl(me.company.logoFileId)} alt="" className="brand-logo" />}
           <span>نظام إدارة الأصول</span>
         </div>
-        <nav>
-          {sections.map((section) => (
-            <ul className="nav" key={section.title}>
-              <li className="nav-section">{section.title}</li>
-              {section.items.map((item) => (
-                <li key={item.to}>
-                  <NavLink to={item.to} end={item.to === '/'} title={item.label}>
-                    <span className="nav-abbr" aria-hidden="true">
-                      {item.abbr}
-                    </span>
-                    <span className="nav-label">{item.label}</span>
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
-          ))}
+        <nav className="nav">
+          {sections.map((section) =>
+            section.items.length === 1 ? (
+              // A one-item group is just a link; a toggle around it would only add a click.
+              <ul className="nav-list nav-single" key={section.title}>
+                <NavItem item={section.items[0]} />
+              </ul>
+            ) : (
+              <NavGroup
+                key={section.title}
+                section={section}
+                active={section.items.some((i) => isActive(i.to, location.pathname))}
+                open={isGroupOpen(section.title, section.items.some((i) => isActive(i.to, location.pathname)))}
+                flat={flatNav}
+                onToggle={(open) => setGroupOpen(section.title, open)}
+              />
+            ),
+          )}
         </nav>
         {/* On phones the theme toggle lives in the drawer to keep the top bar on one line. */}
         <button type="button" className="btn sidebar-theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
