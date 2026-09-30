@@ -45,6 +45,13 @@ export class UsersController {
   }
 
   @RequirePermissions(P.USERS_MANAGE)
+  @Post(':id/passkeys/reset')
+  @HttpCode(200)
+  resetPasskeys(@Param('id', uuid) id: string, @CurrentUser() user: RequestUser) {
+    return this.users.resetPasskeys(id, actorOf(user));
+  }
+
+  @RequirePermissions(P.USERS_MANAGE)
   @Put(':id/roles')
   setRoles(@Param('id', uuid) id: string, @Body() dto: SetUserRolesDto, @CurrentUser() user: RequestUser) {
     return this.users.setRoles(id, dto.roleIds, actorOf(user));

@@ -13,7 +13,7 @@ import { MockEapProvider } from './mock-eap.provider';
       inject: [ENV],
       useFactory: (env: Env): EapProvider =>
         env.AUTH_PROVIDER === 'mock'
-          ? new MockEapProvider(env.MOCK_AUTH_PASSWORD!, env.MOCK_AUTH_FINGERPRINT!)
+          ? new MockEapProvider(env.MOCK_AUTH_PASSWORD!)
           : new EapHttpProvider({
               baseUrl: env.EAP_API_URL!,
               clientId: env.EAP_CLIENT_ID!,

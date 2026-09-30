@@ -40,10 +40,11 @@ Web: `API_UPSTREAM` = the API's private URL (e.g. `http://api.railway.internal:3
 
 EAP is the company's Central Platform (repository `company-central-platform`). The Asset System uses it for:
 
+The fingerprint step is handled by the Asset System itself; see "Fingerprint" below.
+
 | Asset System step | Central Platform |
 | --- | --- |
 | Username and password | `POST /api/v1/auth/login`. The Platform session it opens is closed at once; the Asset System keeps its own session. |
-| Fingerprint | A **passkey**: the device checks the fingerprint, which never leaves it, and signs the Platform's challenge (`/auth/passkey/options`, `/auth/passkey`). The passkey must belong to the same Platform user as the password step. |
 | Employees (link, search, daily sync) | `/api/v1/organization/employees/by-user/{userId}`, `/employees/{id}` and `/employees?q=`, with the application's machine token (client credentials). |
 
 `eapEmployeeId` in the Asset System is the Platform's **employee id** (as the Platform's `docs/development/usooli-integration.md` specifies). Asset System usernames must equal Platform usernames. A Platform account with no employee record, or an inactive employee, cannot sign in.
@@ -60,21 +61,20 @@ EAP is the company's Central Platform (repository `company-central-platform`). T
 
 `AUTH_PROVIDER=eap`, `EAP_API_URL` (the Platform's base URL, e.g. `https://company-central-platform-production.up.railway.app`), `EAP_CLIENT_ID` and `EAP_CLIENT_SECRET`. Set the secret in Railway directly; never commit or paste it elsewhere.
 
-### Passkeys need one company domain
+### Fingerprint: passkeys registered in the Asset System
 
-The browser uses a passkey only on the domain it was created for (the "relying party"). Both systems must therefore sit under one company domain. For example, the Platform on `id.company.com`, the Asset System on `assets.company.com`, and on the Platform:
+A passkey only works on the domain it was created for, and the Platform and the Asset System are on different domains. So the Asset System registers its own passkeys (`FINGERPRINT_MODE=passkey`, the default with `AUTH_PROVIDER=eap`):
 
-| Platform variable | Value |
-| --- | --- |
-| `CCP_Identity__WebAuthn__RelyingPartyId` | `company.com` |
-| `CCP_Identity__WebAuthn__Origins__0` | `https://id.company.com` |
-| `CCP_Identity__WebAuthn__Origins__1` | `https://assets.company.com` |
-
-`*.up.railway.app` domains cannot share passkeys (each is its own site), so custom domains are required. The relying party is baked into every passkey: changing it later means everybody registers again. **As of 2026-09-28 the deployed Platform reports `relyingPartyId: localhost`, so no passkey works yet.**
+- **First sign-in:** after the password, the person registers the device's fingerprint (phone, laptop with a fingerprint reader, Windows Hello). Every later sign-in asks that device to sign a fresh challenge.
+- **Only public keys are stored** (`user_passkeys`). The fingerprint never leaves the device. A user-verification flag is required, so a tap without the fingerprint is refused.
+- **More devices:** a signed-in user adds them from «جلساتي ← بصماتي». The last one cannot be removed.
+- **Lost or replaced device:** an administrator uses «إعادة تعيين البصمة» on the user's page. All the user's passkeys are revoked (kept for the record, never deleted), and the next sign-in registers a new one after the password. This is audited and appears in the security log.
+- **The domain is `WEB_ORIGIN`.** Passkeys are bound to its host name. Moving the Asset System to another domain (for example from `*.up.railway.app` to a company domain) means every user registers again: reset them all after the move.
+- `FINGERPRINT_MODE=code` (the development stand-in) is refused in staging/production.
 
 ### Rate limits
 
-Every sign-in reaches the Platform from the Asset System's server, so the Platform sees one source address. Its per-address limit (`CCP_RateLimits__AuthenticationPerAddress`, default 60 a minute, about 20 sign-ins because each costs three calls) applies to the whole company. The per-account limit (10 a minute) still protects each account. Raise the per-address value if sign-ins are refused at peak times.
+Every sign-in reaches the Platform from the Asset System's server, so the Platform sees one source address. Its per-address limit (`CCP_RateLimits__AuthenticationPerAddress`, default 60 a minute; each sign-in costs one `/auth/login` call, since the fingerprint is verified in the Asset System) applies to the whole company. The per-account limit (10 a minute) still protects each account. Raise the per-address value if sign-ins are refused at peak times.
 
 ## PDF rendering
 

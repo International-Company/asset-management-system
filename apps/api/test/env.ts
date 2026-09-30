@@ -11,6 +11,7 @@ export function applyTestEnv(): void {
   process.env.AUTH_PROVIDER = 'mock';
   process.env.MOCK_AUTH_PASSWORD ??= 'dev-password';
   process.env.MOCK_AUTH_FINGERPRINT ??= '000000';
+  process.env.FINGERPRINT_MODE = 'code';
   process.env.STORAGE_DRIVER = 'local';
   process.env.STORAGE_LOCAL_DIR = './storage-data/test';
   process.env.ENCRYPTION_KEY ??= 'test-only-encryption-key-0123456789abcdef';

@@ -1,13 +1,14 @@
-import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Req, Res } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { ENV } from '../../config/config.module';
-import type { Env } from '../../config/env';
+import { type Env, fingerprintMode } from '../../config/env';
 import { AnyAuthenticated, CurrentUser, Public } from '../../common/decorators';
 import { clientInfo, RequestUser } from '../../common/request-user';
 import { SettingsService } from '../settings/settings.service';
 import { AuthService } from './auth.service';
-import { LoginFingerprintDto, LoginPasswordDto, LoginStartDto } from './auth.dto';
+import { AddPasskeyDto, LoginFingerprintDto, LoginPasswordDto, LoginStartDto } from './auth.dto';
+import { FingerprintService } from './fingerprint.service';
 import { SESSION_COOKIE } from './guards';
 import { SessionService } from './session.service';
 
@@ -20,6 +21,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly sessions: SessionService,
     private readonly settings: SettingsService,
+    private readonly fingerprints: FingerprintService,
   ) {}
 
   /** What the login screen needs before sign-in: provider type and company name. */
@@ -86,7 +88,37 @@ export class AuthController {
       roles: user.roleKeys,
       permissions: [...user.permissions].sort(),
       authProvider: this.env.AUTH_PROVIDER,
+      fingerprintMode: fingerprintMode(this.env),
       company: { nameAr: company['company.nameAr'], nameEn: company['company.nameEn'], logoFileId: company['company.logoFileId'] },
     };
+  }
+
+  // ── My fingerprints (passkeys registered in this system) ──────────────
+
+  @AnyAuthenticated()
+  @Get('passkeys')
+  passkeys(@CurrentUser() user: RequestUser) {
+    return this.fingerprints.list(user.id);
+  }
+
+  /** Step 1 of adding a fingerprint from another device. */
+  @AnyAuthenticated()
+  @Post('passkeys/options')
+  @HttpCode(200)
+  addPasskeyOptions(@CurrentUser() user: RequestUser) {
+    return this.fingerprints.beginAdd({ id: user.id, username: user.username, fullName: user.fullName });
+  }
+
+  @AnyAuthenticated()
+  @Post('passkeys')
+  addPasskey(@CurrentUser() user: RequestUser, @Body() dto: AddPasskeyDto, @Req() req: Request) {
+    return this.fingerprints.finishAdd({ id: user.id, username: user.username, fullName: user.fullName }, dto.challengeId, dto.credential, clientInfo(req));
+  }
+
+  @AnyAuthenticated()
+  @Delete('passkeys/:id')
+  @HttpCode(204)
+  async removePasskey(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+    await this.fingerprints.revokeOwn({ id: user.id, username: user.username, fullName: user.fullName }, id, clientInfo(req));
   }
 }

@@ -4,7 +4,8 @@ import { AppError } from '../../common/errors/app-error';
 import type { ClientInfo } from '../../common/request-user';
 import { SettingsService } from '../settings/settings.service';
 import { SecurityLogService } from '../security/security-log.service';
-import { EAP_PROVIDER, EapProvider, type FingerprintOptions } from '../eap/eap.types';
+import { EAP_PROVIDER, EapProvider } from '../eap/eap.types';
+import { FingerprintService, type FingerprintOptions } from './fingerprint.service';
 import { SessionService } from './session.service';
 
 const CHALLENGE_TTL_MS = 5 * 60_000;
@@ -13,7 +14,8 @@ type Step = 'PASSWORD' | 'FINGERPRINT';
 
 /**
  * Login flow (spec §47): username → password → fingerprint → session.
- * Credentials are verified by EAP; nothing secret is stored or logged here.
+ * The password is verified by EAP; the fingerprint by a passkey registered in
+ * this system (FingerprintService). Nothing secret is stored or logged here.
  */
 @Injectable()
 export class AuthService {
@@ -23,6 +25,7 @@ export class AuthService {
     private readonly settings: SettingsService,
     private readonly securityLog: SecurityLogService,
     @Inject(EAP_PROVIDER) private readonly eap: EapProvider,
+    private readonly fingerprint: FingerprintService,
   ) {}
 
   /** Step 1. Always succeeds so the response does not reveal whether the username exists. */
@@ -76,7 +79,8 @@ export class AuthService {
       data: { step: 'FINGERPRINT', providerRef: result.providerRef },
     });
     if (advanced.count === 0) throw new AppError('SESSION_EXPIRED');
-    return { next: 'fingerprint', fingerprint: await this.eap.fingerprintOptions() };
+    const fingerprint = await this.fingerprint.options(challenge.id, { id: user.id, username: user.username, fullName: employee.fullName });
+    return { next: 'fingerprint', fingerprint };
   }
 
   /** Step 3: on success, creates the authenticated session. */
@@ -89,12 +93,7 @@ export class AuthService {
     if (!user || !user.isActive) throw new AppError('UNAUTHENTICATED');
     await this.assertNotLocked(user, challenge.username, client);
 
-    const ok = await this.eap.verifyFingerprint({
-      username: challenge.username,
-      eapEmployeeId: user.employee.eapEmployeeId,
-      providerRef: challenge.providerRef,
-      assertion,
-    });
+    const ok = await this.fingerprint.verify(challenge, { id: user.id, username: user.username, fullName: user.employee.fullName }, assertion, client);
     if (!ok) {
       await this.registerFailure(user, challenge.username, client, 'fingerprint_failed');
       throw new AppError('FINGERPRINT_FAILED');

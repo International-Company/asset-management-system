@@ -23,6 +23,8 @@ export interface UserRow {
   createdAt: string;
   employee: { id: string; eapEmployeeId: string; fullName: string; jobTitle: string | null; email: string | null; isActive: boolean };
   roles: RoleSummary[];
+  /** Active fingerprints (passkeys) registered in the Asset System. */
+  passkeys?: number;
 }
 
 export interface DirectoryEntry {

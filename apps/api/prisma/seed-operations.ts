@@ -76,7 +76,7 @@ export async function seedOperations(prisma: PrismaService): Promise<void> {
   const audit = new AuditService(prisma);
   const numbering = new NumberingService();
   const notifications = new NotificationsService(prisma);
-  const eap = new MockEapProvider(env.MOCK_AUTH_PASSWORD ?? 'dev-password', env.MOCK_AUTH_FINGERPRINT ?? '000000');
+  const eap = new MockEapProvider(env.MOCK_AUTH_PASSWORD ?? 'dev-password');
   const employees = new EmployeesService(env, eap, prisma, audit, notifications);
   const assets = new AssetsService(prisma, audit, numbering, employees);
   const settings = new SettingsService(prisma, audit, new SecurityLogService(prisma));

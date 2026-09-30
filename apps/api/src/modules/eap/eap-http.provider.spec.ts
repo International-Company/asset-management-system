@@ -5,7 +5,7 @@ import { EapHttpProvider } from './eap-http.provider';
  * (contracts/platform-api.json and docs/development/usooli-integration.md):
  * paths, payload shapes, permissions and problem documents.
  */
-function fakePlatform(overrides: { mustChangePassword?: boolean; passkeyUser?: string; tokenStatus?: number; canReadPositions?: boolean } = {}) {
+function fakePlatform(overrides: { mustChangePassword?: boolean; tokenStatus?: number; canReadPositions?: boolean } = {}) {
   const calls: Array<{ method: string; path: string; auth?: string; body?: string }> = [];
   const employees = [
     { id: 'e1', employeeNumber: 'EMP-001', fullName: { ar: 'سامي الأحمد', en: 'Sami' }, userId: 'u1', positionId: 'p1', positionCode: 'SYS-MGR', workEmail: 'sami@example.test', workPhone: null, isActive: true },
@@ -32,12 +32,6 @@ function fakePlatform(overrides: { mustChangePassword?: boolean; passkeyUser?: s
       return json(200, { accessToken: 'user-token', refreshToken: 'r', expiresInSeconds: 900, tokenType: 'Bearer', user: { id: accounts[username], username, mustChangePassword: !!overrides.mustChangePassword } });
     }
     if (path === '/auth/logout') return init?.body ? json(400, {}) : new Response(null, { status: 204 });
-    if (path === '/auth/passkey/options') return json(200, { challenge: 'Y2hhbGxlbmdl', relyingPartyId: 'company.test', timeoutMilliseconds: '300000' });
-    if (path === '/auth/passkey') {
-      const body = JSON.parse(init!.body as string);
-      if (body.signature !== 'good') return json(401, { code: 'IDENTITY.INVALID_PASSKEY' });
-      return json(200, { accessToken: 'user-token-2', refreshToken: 'r', expiresInSeconds: 900, tokenType: 'Bearer', user: { id: overrides.passkeyUser ?? 'u1', username: 'sami', mustChangePassword: false } });
-    }
     if (path.startsWith('/organization/')) {
       if (!machine) return json(401, {});
       const byUser = /^\/organization\/employees\/by-user\/(.+)$/.exec(path);
@@ -68,8 +62,6 @@ function fakePlatform(overrides: { mustChangePassword?: boolean; passkeyUser?: s
   return { provider, calls };
 }
 
-const assertion = (signature: string) =>
-  JSON.stringify({ credentialId: 'cred', clientDataJson: 'cdj', authenticatorData: 'ad', signature, userHandle: 'uh' });
 
 describe('EapHttpProvider (Company Central Platform)', () => {
   it('accepts the right password, links it to the employee id, and closes the Platform session', async () => {
@@ -90,21 +82,6 @@ describe('EapHttpProvider (Company Central Platform)', () => {
   it('refuses when the Platform requires a password change', async () => {
     const { provider } = fakePlatform({ mustChangePassword: true });
     expect(await provider.verifyPassword('sami', 'secret')).toEqual({ ok: false, reason: 'password_change_required' });
-  });
-
-  it('passes the passkey challenge to the browser and verifies the passkey belongs to the same person', async () => {
-    const { provider } = fakePlatform();
-    expect(await provider.fingerprintOptions()).toEqual({ type: 'webauthn', challenge: 'Y2hhbGxlbmdl', rpId: 'company.test', timeoutMs: 300000 });
-    const input = { username: 'sami', eapEmployeeId: 'e1', providerRef: 'u1' };
-    expect(await provider.verifyFingerprint({ ...input, assertion: assertion('good') })).toBe(true);
-    expect(await provider.verifyFingerprint({ ...input, assertion: assertion('bad') })).toBe(false);
-    expect(await provider.verifyFingerprint({ ...input, assertion: 'not json' })).toBe(false);
-    expect(await provider.verifyFingerprint({ ...input, providerRef: null, assertion: assertion('good') })).toBe(false);
-  });
-
-  it("someone else's passkey is refused even when the Platform accepts it", async () => {
-    const { provider } = fakePlatform({ passkeyUser: 'u2' });
-    expect(await provider.verifyFingerprint({ username: 'sami', eapEmployeeId: 'e1', providerRef: 'u1', assertion: assertion('good') })).toBe(false);
   });
 
   it('reads one employee by id with one cached machine token; an unknown id is null', async () => {

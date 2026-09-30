@@ -135,7 +135,8 @@ test('offline start in a new tab, QR lookup with photo and note, failed sync the
   await tab.route('**/api/v1/sync/operations/**', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
   await context.setOffline(false);
   await tab.goto('/offline');
-  await expect(tab.getByText('محاولات: 1').first()).toBeVisible({ timeout: 15_000 });
+  // One attempt when the connection returns and another when the page opens: either order is fine.
+  await expect(tab.getByText(/محاولات: [1-9]/).first()).toBeVisible({ timeout: 15_000 });
   await expect(tab.getByRole('link', { name: 'المزامنة: 2 بانتظار المزامنة' })).toBeVisible();
 
   // Retry once the server is back: both operations go through.

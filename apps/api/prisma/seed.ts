@@ -134,7 +134,7 @@ async function main(): Promise<void> {
 async function seedAssets(): Promise<void> {
   const env = { APP_ENV: appEnv } as Env;
   const audit = new AuditService(prisma);
-  const eap = new MockEapProvider(process.env.MOCK_AUTH_PASSWORD ?? 'dev-password', process.env.MOCK_AUTH_FINGERPRINT ?? '000000');
+  const eap = new MockEapProvider(process.env.MOCK_AUTH_PASSWORD ?? 'dev-password');
   const employees = new EmployeesService(env, eap, prisma, audit, new NotificationsService(prisma));
   const assets = new AssetsService(prisma, audit, new NumberingService(), employees);
   const admin = await prisma.user.findUniqueOrThrow({ where: { username: 'admin' }, include: { employee: true } });

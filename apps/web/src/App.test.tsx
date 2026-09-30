@@ -1,6 +1,10 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
+
+// The browser's WebAuthn calls, stood in for (jsdom has no authenticator).
+const webauthn = vi.hoisted(() => ({ startRegistration: vi.fn(), startAuthentication: vi.fn(), browserSupportsWebAuthn: vi.fn(() => true) }));
+vi.mock('@simplewebauthn/browser', () => webauthn);
 import { App } from './App';
 import { meResponse, mockApi, renderApp, unauthenticated } from './test/render';
 
@@ -59,45 +63,24 @@ describe('Login flow', () => {
   });
 });
 
-describe('Login with EAP passkey (fingerprint on the device)', () => {
+describe('Login with a passkey registered in the Asset System', () => {
   const eapConfig = () => ({ status: 200, body: { authProvider: 'eap', company: { nameAr: 'شركة تجريبية', nameEn: 'Demo Co' } } });
-  const bytes = (...b: number[]) => new Uint8Array(b).buffer;
+  const creation = { challenge: 'cmVn', rp: { id: 'assets.test', name: 'نظام إدارة الأصول' }, user: { id: 'dQ', name: 'sami', displayName: 'سامي' }, pubKeyCredParams: [] };
+  const request = { challenge: 'Z2V0', rpId: 'assets.test', allowCredentials: [{ id: 'cred-1', type: 'public-key' }], userVerification: 'required' };
 
-  afterEach(() => {
-    Reflect.deleteProperty(window, 'PublicKeyCredential');
-    Reflect.deleteProperty(navigator, 'credentials');
-  });
-
-  function stubPasskey(result: 'ok' | 'cancel') {
-    const get = vi.fn(async () => {
-      if (result === 'cancel') throw new DOMException('The operation either timed out or was not allowed.', 'NotAllowedError');
-      return {
-        id: 'cred-1',
-        response: { clientDataJSON: bytes(1, 2, 3), authenticatorData: bytes(255, 254), signature: bytes(62, 63), userHandle: bytes(9) },
-      };
-    });
-    Object.defineProperty(window, 'PublicKeyCredential', { configurable: true, value: function PublicKeyCredential() {} });
-    Object.defineProperty(navigator, 'credentials', { configurable: true, value: { get } });
-    return get;
-  }
-
-  function mocks(onFingerprint: () => void = () => {}) {
+  function mocks(fingerprint: unknown, onFingerprint: () => void = () => {}) {
     let signedIn = false;
-    const calls = mockApi({
+    return mockApi({
       'GET /auth/me': () => (signedIn ? meResponse(['assets.view'])() : unauthenticated()),
       'GET /auth/config': eapConfig,
       'POST /auth/login/start': () => ({ status: 200, body: { challengeId: 'c1', next: 'password' } }),
-      'POST /auth/login/password': () => ({
-        status: 200,
-        body: { next: 'fingerprint', fingerprint: { type: 'webauthn', challenge: 'AQID', rpId: 'company.test', timeoutMs: 60000 } },
-      }),
+      'POST /auth/login/password': () => ({ status: 200, body: { next: 'fingerprint', fingerprint } }),
       'POST /auth/login/fingerprint': () => {
         onFingerprint();
         signedIn = true;
         return { status: 200, body: { ok: true } };
       },
     });
-    return calls;
   }
 
   async function reachFingerprint() {
@@ -110,24 +93,32 @@ describe('Login with EAP passkey (fingerprint on the device)', () => {
     return user;
   }
 
-  it('asks the device for the passkey and sends only the signed assertion (base64url)', async () => {
-    const get = stubPasskey('ok');
-    const calls = mocks();
+  it('first sign-in registers the device fingerprint and sends the signed response', async () => {
+    webauthn.startRegistration.mockResolvedValue({ id: 'new-cred', rawId: 'new-cred', type: 'public-key', response: { attestationObject: 'YQ' } });
+    const calls = mocks({ type: 'passkey-register', options: creation });
     const user = await reachFingerprint();
-    await user.click(await screen.findByRole('button', { name: 'التحقق بالبصمة' }));
+    expect(await screen.findByText(/هذا أول دخول لك/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'تسجيل البصمة' }));
 
     expect(await screen.findByRole('heading', { name: /مرحبًا/ })).toBeInTheDocument();
-    const options = (get.mock.calls[0] as unknown as [CredentialRequestOptions])[0].publicKey!;
-    expect(options).toMatchObject({ rpId: 'company.test', userVerification: 'required', timeout: 60000 });
-    expect(new Uint8Array(options.challenge as ArrayBuffer)).toEqual(new Uint8Array([1, 2, 3]));
+    expect(webauthn.startRegistration).toHaveBeenCalledWith({ optionsJSON: creation });
     const sent = calls.find((c) => c.key === 'POST /auth/login/fingerprint')!.body as { assertion: string };
-    expect(JSON.parse(sent.assertion)).toEqual({ credentialId: 'cred-1', clientDataJson: 'AQID', authenticatorData: '__4', signature: 'Pj8', userHandle: 'CQ' });
+    expect(JSON.parse(sent.assertion)).toMatchObject({ id: 'new-cred', response: { attestationObject: 'YQ' } });
+  });
+
+  it('later sign-ins ask the device to sign the challenge', async () => {
+    webauthn.startAuthentication.mockResolvedValue({ id: 'cred-1', rawId: 'cred-1', type: 'public-key', response: { signature: 'c2ln' } });
+    mocks({ type: 'passkey', options: request });
+    const user = await reachFingerprint();
+    await user.click(await screen.findByRole('button', { name: 'التحقق بالبصمة' }));
+    expect(await screen.findByRole('heading', { name: /مرحبًا/ })).toBeInTheDocument();
+    expect(webauthn.startAuthentication).toHaveBeenCalledWith({ optionsJSON: request });
   });
 
   it('explains a cancelled fingerprint without sending anything', async () => {
-    stubPasskey('cancel');
+    webauthn.startAuthentication.mockRejectedValue(new DOMException('The operation either timed out or was not allowed.', 'NotAllowedError'));
     let sent = false;
-    mocks(() => (sent = true));
+    mocks({ type: 'passkey', options: request }, () => (sent = true));
     const user = await reachFingerprint();
     await user.click(await screen.findByRole('button', { name: 'التحقق بالبصمة' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('لم يكتمل التحقق من البصمة');

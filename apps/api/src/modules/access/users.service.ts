@@ -16,6 +16,7 @@ const USER_INCLUDE = {
     where: { scopeLocationId: null, scopeDepartmentId: null },
     include: { role: { select: { id: true, key: true, name: true, status: true } } },
   },
+  _count: { select: { passkeys: { where: { revokedAt: null } } } },
 } satisfies Prisma.UserInclude;
 
 type UserRow = Prisma.UserGetPayload<{ include: typeof USER_INCLUDE }>;
@@ -30,6 +31,8 @@ function present(u: UserRow) {
     createdAt: u.createdAt,
     employee: u.employee,
     roles: u.roles.map((r) => r.role),
+    /** Active fingerprints (passkeys) registered in the Asset System. */
+    passkeys: u._count.passkeys,
   };
 }
 
@@ -166,6 +169,21 @@ export class UsersService {
       await tx.user.update({ where: { id }, data: { lockedUntil: null, failedLoginCount: 0 } });
       await this.audit.record({ actor, operation: 'USER_UNLOCKED', entityType: 'User', entityId: id, oldData: { lockedUntil: before.lockedUntil } }, tx);
       await this.securityLog.record({ type: 'USER_UNLOCKED', userId: id, username: before.username, actorId: actor.id }, tx);
+      return this.getIn(tx, id);
+    });
+  }
+
+  /**
+   * Lost or replaced device: revokes every passkey of the user. They register a
+   * new one at their next sign-in, right after the password (spec §47).
+   */
+  async resetPasskeys(id: string, actor: AuditActor) {
+    return this.prisma.transaction(async (tx) => {
+      const before = await tx.user.findUnique({ where: { id } });
+      if (!before) throw AppError.notFound('المستخدم غير موجود.');
+      const res = await tx.userPasskey.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date(), revokedById: actor.id } });
+      await this.audit.record({ actor, operation: 'USER_PASSKEYS_RESET', entityType: 'User', entityId: id, newData: { revoked: res.count } }, tx);
+      await this.securityLog.record({ type: 'PASSKEY_REVOKED', userId: id, username: before.username, actorId: actor.id, details: { all: true, revoked: res.count } }, tx);
       return this.getIn(tx, id);
     });
   }

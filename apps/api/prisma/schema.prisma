@@ -89,6 +89,8 @@ enum SecurityEventType {
   USER_ACTIVATED
   USER_DEACTIVATED
   USER_UNLOCKED
+  PASSKEY_REGISTERED
+  PASSKEY_REVOKED
 }
 
 enum SyncOperationStatus {
@@ -167,11 +169,13 @@ model User {
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  employee      Employee       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  roles         UserRole[]
-  sessions      Session[]
-  notifications Notification[]
-  savedSearches SavedSearch[]
+  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  roles           UserRole[]
+  sessions        Session[]
+  notifications   Notification[]
+  savedSearches   SavedSearch[]
+  passkeys        UserPasskey[]
+  passkeysRevoked UserPasskey[]  @relation("PasskeyRevokedBy")
 
   @@map("users")
 }
@@ -298,16 +302,45 @@ model Session {
 }
 
 /// Short-lived state for the multi-step login (username → password → fingerprint).
+/// A passkey registered in the Asset System (spec §47). The fingerprint is
+/// checked on the device and never reaches the server: only the public key of
+/// the device's credential is stored, and each sign-in is a signature by it.
+model UserPasskey {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  /// base64url credential id, as the browser reports it.
+  credentialId String    @unique @map("credential_id")
+  publicKey    Bytes     @map("public_key")
+  /// Signature counter; a decrease means a cloned authenticator.
+  counter      BigInt    @default(0)
+  transports   String[]  @default([])
+  /// Human hint (browser / OS) shown in the account page.
+  deviceName   String?   @map("device_name")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt   DateTime? @map("last_used_at") @db.Timestamptz(3)
+  /// Revoked passkeys are kept for the security record, never deleted.
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokedById  String?   @map("revoked_by_id") @db.Uuid
+
+  user      User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  revokedBy User? @relation("PasskeyRevokedBy", fields: [revokedById], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("user_passkeys")
+}
+
 model LoginChallenge {
-  id          String    @id @default(uuid()) @db.Uuid
-  username    String
-  step        String
-  providerRef String?   @map("provider_ref")
-  ip          String?
-  userAgent   String?   @map("user_agent")
-  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
-  consumedAt  DateTime? @map("consumed_at") @db.Timestamptz(3)
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                String    @id @default(uuid()) @db.Uuid
+  username          String
+  step              String
+  providerRef       String?   @map("provider_ref")
+  /// WebAuthn challenge issued for this attempt (fingerprint step or adding a passkey).
+  webauthnChallenge String?   @map("webauthn_challenge")
+  ip                String?
+  userAgent         String?   @map("user_agent")
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt        DateTime? @map("consumed_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@index([expiresAt])
   @@map("login_challenges")

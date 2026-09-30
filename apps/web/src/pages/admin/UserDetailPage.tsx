@@ -19,6 +19,7 @@ export function UserDetailPage() {
   const roles = useQuery({ queryKey: ['roles'], queryFn: () => api<Role[]>('/roles') });
   const [selected, setSelected] = useState<string[] | null>(null);
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const refresh = (data: UserRow) => {
     queryClient.setQueryData(['users', id], data);
@@ -42,6 +43,14 @@ export function UserDetailPage() {
     mutationFn: () => api<UserRow>(`/users/${id}/unlock`, { method: 'POST' }),
     onSuccess: refresh,
   });
+  const resetPasskeys = useMutation({
+    mutationFn: () => api<UserRow>(`/users/${id}/passkeys/reset`, { method: 'POST' }),
+    onSuccess: (data) => {
+      refresh(data);
+      setConfirmReset(false);
+    },
+  });
+  const passkeysEnabled = me?.fingerprintMode === 'passkey';
 
   if (user.isPending) return <Loading />;
   if (user.isError) return <ErrorState error={user.error} onRetry={() => void user.refetch()} />;
@@ -67,6 +76,11 @@ export function UserDetailPage() {
             {u.lockedUntil && (
               <button type="button" className="btn" disabled={unlock.isPending} onClick={() => unlock.mutate()}>
                 فك القفل
+              </button>
+            )}
+            {passkeysEnabled && (u.passkeys ?? 0) > 0 && (
+              <button type="button" className="btn" onClick={() => setConfirmReset(true)}>
+                إعادة تعيين البصمة
               </button>
             )}
             {u.isActive ? (
@@ -105,6 +119,12 @@ export function UserDetailPage() {
           <dd>{formatDateTime(u.lastLoginAt)}</dd>
           <dt>مقفل حتى</dt>
           <dd>{formatDateTime(u.lockedUntil)}</dd>
+          {passkeysEnabled && (
+            <>
+              <dt>البصمات المسجلة</dt>
+              <dd>{u.passkeys ? `${u.passkeys} جهاز` : 'لا يوجد — يسجّل بصمته في أول دخول'}</dd>
+            </>
+          )}
           <dt>تاريخ الإنشاء</dt>
           <dd>{formatDateTime(u.createdAt)}</dd>
         </dl>
@@ -152,6 +172,17 @@ export function UserDetailPage() {
         error={setActive.error ? (setActive.error as Error).message : null}
         onConfirm={() => setActive.mutate(false)}
         onClose={() => setConfirmDeactivate(false)}
+      />
+      <ConfirmDialog
+        open={confirmReset}
+        title="إعادة تعيين البصمة"
+        message={`تُلغى كل بصمات ${u.employee.fullName} المسجلة (مثلًا عند فقدان الجهاز أو تغييره). في دخوله التالي، وبعد كلمة المرور، يسجّل بصمته من جديد.`}
+        confirmLabel="إعادة التعيين"
+        danger
+        busy={resetPasskeys.isPending}
+        error={resetPasskeys.error ? (resetPasskeys.error as Error).message : null}
+        onConfirm={() => resetPasskeys.mutate()}
+        onClose={() => setConfirmReset(false)}
       />
     </>
   );

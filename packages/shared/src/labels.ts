@@ -14,6 +14,8 @@ export const SECURITY_EVENT_LABELS: Record<string, string> = {
   USER_ACTIVATED: 'تفعيل مستخدم',
   USER_DEACTIVATED: 'تعطيل مستخدم',
   USER_UNLOCKED: 'فك قفل مستخدم',
+  PASSKEY_REGISTERED: 'تسجيل بصمة جهاز',
+  PASSKEY_REVOKED: 'إلغاء بصمة',
 };
 
 export const LOGIN_FAILURE_REASONS: Record<string, string> = {
@@ -57,6 +59,7 @@ const OPERATION_OVERRIDES: Record<string, string> = {
   SETTING_CHANGED: 'تغيير إعداد',
   NUMBER_SEQUENCE_CHANGED: 'تغيير إعدادات الترقيم',
   EMPLOYEE_SYNCED: 'مزامنة موظف من EAP',
+  USER_PASSKEYS_RESET: 'إعادة تعيين بصمات مستخدم',
   LOCATION_DEPARTMENT_LINKED: 'ربط قسم بموقع',
   LOCATION_DEPARTMENT_UNLINKED: 'إلغاء ربط قسم بموقع',
   LOCATION_DEPARTMENT_UPDATED: 'تعديل ربط قسم بموقع',

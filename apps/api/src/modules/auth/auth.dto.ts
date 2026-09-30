@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, MaxLength, IsObject } from 'class-validator';
 
 export class LoginStartDto {
   @IsString()
@@ -26,4 +26,13 @@ export class LoginFingerprintDto {
   @IsNotEmpty()
   @MaxLength(8192)
   assertion: string;
+}
+
+export class AddPasskeyDto {
+  @IsUUID()
+  challengeId: string;
+
+  /** The browser's registration response (WebAuthn, JSON). Verified by the server. */
+  @IsObject()
+  credential: Record<string, unknown>;
 }

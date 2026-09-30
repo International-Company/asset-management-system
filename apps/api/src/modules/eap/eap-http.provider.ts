@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { AppError } from '../../common/errors/app-error';
-import type { EapEmployee, EapProvider, FingerprintOptions, PasswordResult, ProviderHealth } from './eap.types';
+import type { EapEmployee, EapProvider, PasswordResult, ProviderHealth } from './eap.types';
 
 /**
  * EAP = the Company Central Platform (contracts/platform-api.json in its
@@ -9,10 +9,8 @@ import type { EapEmployee, EapProvider, FingerprintOptions, PasswordResult, Prov
  * - Password step: POST /auth/login with the person's credentials. The
  *   Platform session it opens is closed straight away; the Asset System keeps
  *   its own session.
- * - Fingerprint step: a passkey. The browser asks the device for the
- *   fingerprint (it never leaves the device) and signs the Platform's
- *   challenge; the Platform verifies the signature. The passkey must belong to
- *   the same Platform user who passed the password step.
+ * - Fingerprint step: not here. A passkey only works on the domain it was
+ *   registered for, so the Asset System registers its own (FingerprintService).
  * - Employees: read with this application's machine token (client
  *   credentials). The application needs `platform.employees.view`; with
  *   `platform.organization.view` as well, job titles are shown by name rather
@@ -98,48 +96,6 @@ export class EapHttpProvider implements EapProvider {
     const employee = await this.machineOrNull<PlatformEmployee>(`/organization/employees/by-user/${encodeURIComponent(result.user.id)}`);
     if (!employee || !employee.isActive) return { ok: false };
     return { ok: true, eapEmployeeId: employee.id, providerRef: result.user.id };
-  }
-
-  async fingerprintOptions(): Promise<FingerprintOptions> {
-    try {
-      const o = await this.call<{ challenge: string; relyingPartyId: string; timeoutMilliseconds: number | string }>('/auth/passkey/options', {
-        method: 'POST',
-      });
-      return { type: 'webauthn', challenge: o.challenge, rpId: o.relyingPartyId, timeoutMs: Number(o.timeoutMilliseconds) };
-    } catch (e) {
-      throw this.unavailable(e);
-    }
-  }
-
-  async verifyFingerprint(input: { username: string; eapEmployeeId: string; providerRef: string | null; assertion: string }): Promise<boolean> {
-    let assertion: Record<string, unknown>;
-    try {
-      assertion = JSON.parse(input.assertion) as Record<string, unknown>;
-    } catch {
-      return false;
-    }
-    const fields = ['credentialId', 'clientDataJson', 'authenticatorData', 'signature'];
-    if (fields.some((f) => typeof assertion[f] !== 'string') || (assertion.userHandle != null && typeof assertion.userHandle !== 'string')) return false;
-
-    let result: AuthResult;
-    try {
-      result = await this.call<AuthResult>('/auth/passkey', {
-        method: 'POST',
-        json: {
-          credentialId: assertion.credentialId,
-          clientDataJson: assertion.clientDataJson,
-          authenticatorData: assertion.authenticatorData,
-          signature: assertion.signature,
-          userHandle: assertion.userHandle ?? null,
-        },
-      });
-    } catch (e) {
-      if (e instanceof PlatformError && e.status >= 400 && e.status < 500 && e.status !== 429) return false;
-      throw this.unavailable(e);
-    }
-    await this.endPlatformSession(result.accessToken);
-    // Somebody else's passkey on the same device is not this person's fingerprint.
-    return !!input.providerRef && result.user.id === input.providerRef;
   }
 
   // ── Employees ─────────────────────────────────────────────────────────

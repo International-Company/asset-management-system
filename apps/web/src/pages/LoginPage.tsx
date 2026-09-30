@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Navigate, useLocation } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { type FingerprintOptions, getPasskeyAssertion, PasskeyCancelled, passkeysSupported } from '../lib/passkey';
+import { createPasskey, type FingerprintOptions, PasskeyCancelled, passkeysSupported, signWithPasskey } from '../lib/passkey';
 
 type Step = 'username' | 'password' | 'fingerprint';
 
@@ -67,14 +67,24 @@ export function LoginPage() {
         setFingerprint(res.fingerprint);
         setStep('fingerprint');
       } else {
-        // EAP: the device checks the fingerprint and signs EAP's challenge.
-        const signed = fingerprint?.type === 'webauthn' ? await getPasskeyAssertion(fingerprint) : assertion;
+        // The device checks the fingerprint and signs this system's challenge
+        // (or, on first sign-in, creates the passkey that will be used from now on).
+        const signed =
+          fingerprint?.type === 'passkey'
+            ? await signWithPasskey(fingerprint.options)
+            : fingerprint?.type === 'passkey-register'
+              ? await createPasskey(fingerprint.options)
+              : assertion;
         await api('/auth/login/fingerprint', { method: 'POST', json: { challengeId, assertion: signed } });
         await refresh();
       }
     } catch (err) {
       if (err instanceof PasskeyCancelled) {
-        setError('لم يكتمل التحقق من البصمة. تأكد أن للجهاز مفتاح مرور (Passkey) مسجلًا في نظام EAP، ثم أعد المحاولة.');
+        setError(
+          fingerprint?.type === 'passkey-register'
+            ? 'لم يكتمل تسجيل البصمة. تأكد أن في الجهاز مستشعر بصمة (أو Windows Hello) مفعّلًا، ثم أعد المحاولة.'
+            : 'لم يكتمل التحقق من البصمة. إن كنت تستخدم جهازًا جديدًا فاطلب من مدير النظام إعادة تعيين بصمتك، أو أضف هذا الجهاز من صفحة «جلساتي» على جهازك الأول.',
+        );
         return;
       }
       const apiErr = err instanceof ApiError ? err : null;
@@ -93,7 +103,8 @@ export function LoginPage() {
 
   const companyName = config.data?.company.nameAr;
   const usesCode = fingerprint?.type === 'code';
-  const usesPasskey = fingerprint?.type === 'webauthn';
+  const usesPasskey = fingerprint?.type === 'passkey' || fingerprint?.type === 'passkey-register';
+  const registering = fingerprint?.type === 'passkey-register';
   const canSubmitFingerprint = usesCode ? !!assertion : usesPasskey && passkeysSupported();
 
   return (
@@ -179,6 +190,11 @@ export function LoginPage() {
                   />
                   <span className="hint">بيئة التطوير: مزود المصادقة التجريبي يحاكي خطوة البصمة.</span>
                 </div>
+              ) : passkeysSupported() && registering ? (
+                <>
+                  <div className="alert alert-info">هذا أول دخول لك من هذا الحساب: سجّل بصمتك الآن. ستُستخدم في كل دخول لاحق.</div>
+                  <p>اضغط «تسجيل البصمة» ثم ضع إصبعك على مستشعر البصمة في جهازك. تبقى البصمة على الجهاز ولا تُرسل إلى أي خادم.</p>
+                </>
               ) : passkeysSupported() ? (
                 <p>اضغط «التحقق بالبصمة» ثم ضع إصبعك على مستشعر البصمة في جهازك. تبقى البصمة على الجهاز ولا تُرسل إلى أي خادم.</p>
               ) : (
@@ -192,7 +208,7 @@ export function LoginPage() {
             className="btn btn-primary btn-block"
             disabled={busy || (step === 'fingerprint' && !canSubmitFingerprint)}
           >
-            {busy ? 'جارٍ التحقق…' : step === 'fingerprint' ? (usesPasskey ? 'التحقق بالبصمة' : 'دخول') : 'متابعة'}
+            {busy ? 'جارٍ التحقق…' : step === 'fingerprint' ? (registering ? 'تسجيل البصمة' : usesPasskey ? 'التحقق بالبصمة' : 'دخول') : 'متابعة'}
           </button>
         </form>
       </div>

@@ -11,6 +11,8 @@ export interface Me {
   roles: string[];
   permissions: PermissionKey[];
   authProvider: 'mock' | 'eap';
+  /** How the fingerprint step works: passkeys on the device, or the development code. */
+  fingerprintMode?: 'code' | 'passkey';
   company: { nameAr: string; nameEn: string; logoFileId: string | null };
 }
 

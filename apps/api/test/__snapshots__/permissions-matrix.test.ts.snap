@@ -2,8 +2,10 @@
 
 exports[`Permission matrix (spec §82) > routes open to any signed-in user are only personal or self-checking ones 1`] = `
 [
+  "DELETE /api/v1/auth/passkeys/:id",
   "DELETE /api/v1/saved-searches/:id",
   "GET /api/v1/auth/me",
+  "GET /api/v1/auth/passkeys",
   "GET /api/v1/custodies/:id",
   "GET /api/v1/custodies/pending-for-me",
   "GET /api/v1/custody-returns/:id",
@@ -18,6 +20,8 @@ exports[`Permission matrix (spec §82) > routes open to any signed-in user are o
   "GET /api/v1/sync/operations",
   "PATCH /api/v1/saved-searches/:id",
   "POST /api/v1/auth/logout",
+  "POST /api/v1/auth/passkeys",
+  "POST /api/v1/auth/passkeys/options",
   "POST /api/v1/custodies/:id/confirm",
   "POST /api/v1/custodies/:id/reject",
   "POST /api/v1/notifications/:id/read",

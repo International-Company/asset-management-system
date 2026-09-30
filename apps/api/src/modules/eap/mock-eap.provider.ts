@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import type { EapEmployee, EapProvider, PasswordResult, ProviderHealth, FingerprintOptions } from './eap.types';
+import type { EapEmployee, EapProvider, PasswordResult, ProviderHealth } from './eap.types';
 
 /**
  * Development/test stand-in for EAP (spec §88). Refused in staging and
@@ -24,23 +24,12 @@ function safeEqual(a: string, b: string): boolean {
 export class MockEapProvider implements EapProvider {
   readonly name = 'mock' as const;
 
-  constructor(
-    private readonly password: string,
-    private readonly fingerprint: string,
-  ) {}
+  constructor(private readonly password: string) {}
 
   async verifyPassword(username: string, password: string): Promise<PasswordResult> {
     const person = MOCK_DIRECTORY.find((p) => p.username === username.toLowerCase());
     if (!person || !person.isActive || !safeEqual(password, this.password)) return { ok: false };
     return { ok: true, eapEmployeeId: person.eapEmployeeId, providerRef: null };
-  }
-
-  async fingerprintOptions(): Promise<FingerprintOptions> {
-    return { type: 'code' };
-  }
-
-  async verifyFingerprint(input: { assertion: string }): Promise<boolean> {
-    return safeEqual(input.assertion, this.fingerprint);
   }
 
   async getEmployee(eapEmployeeId: string): Promise<EapEmployee | null> {

@@ -43,6 +43,14 @@ export const envSchema = z
       .regex(/^[a-z0-9._-]{2,100}$/)
       .optional(),
 
+    /**
+     * Fingerprint step (spec §47). passkey: the device checks the fingerprint and
+     * signs a challenge; the Asset System stores only public keys. code: a
+     * development stand-in (MOCK_AUTH_FINGERPRINT). Default: code with the mock
+     * provider, passkey otherwise. code is refused in staging/production.
+     */
+    FINGERPRINT_MODE: z.enum(['code', 'passkey']).optional(),
+
     /** Chromium used for PDF rendering. Empty = the browser installed by Playwright. */
     CHROMIUM_PATH: z.string().optional(),
   })
@@ -55,6 +63,13 @@ export const envSchema = z
       });
     }
     const deployed = env.APP_ENV === 'staging' || env.APP_ENV === 'production';
+    const mode = env.FINGERPRINT_MODE ?? (env.AUTH_PROVIDER === 'mock' ? 'code' : 'passkey');
+    if (deployed && mode === 'code') {
+      ctx.addIssue({ code: 'custom', path: ['FINGERPRINT_MODE'], message: 'The development fingerprint code is not allowed in staging/production' });
+    }
+    if (mode === 'code' && !env.MOCK_AUTH_FINGERPRINT) {
+      ctx.addIssue({ code: 'custom', path: ['MOCK_AUTH_FINGERPRINT'], message: 'MOCK_AUTH_FINGERPRINT is required when FINGERPRINT_MODE is code' });
+    }
     if (deployed && env.AUTH_PROVIDER === 'mock') {
       ctx.addIssue({
         code: 'custom',
@@ -93,6 +108,11 @@ export const envSchema = z
   });
 
 export type Env = z.infer<typeof envSchema>;
+
+/** The effective fingerprint mode (see FINGERPRINT_MODE). */
+export function fingerprintMode(env: Pick<Env, 'FINGERPRINT_MODE' | 'AUTH_PROVIDER'>): 'code' | 'passkey' {
+  return env.FINGERPRINT_MODE ?? (env.AUTH_PROVIDER === 'mock' ? 'code' : 'passkey');
+}
 
 /** Validates process.env. Error messages name the variable but never echo its value. */
 export function validateEnv(raw: Record<string, unknown>): Env {
