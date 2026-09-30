@@ -3,9 +3,17 @@
  * White + blue, restrained palette, no gradients or decoration.
  * Layout uses logical properties (inline/block) so RTL is the natural flow.
  */
-@import '@fontsource/ibm-plex-sans-arabic/400.css';
-@import '@fontsource/ibm-plex-sans-arabic/500.css';
-@import '@fontsource/ibm-plex-sans-arabic/600.css';
+/* IBM Plex Sans Arabic, bundled with the app (works offline, matches the official
+ * PDFs). Arabic and Latin only, in the weights the interface uses; 700 is for
+ * headings, which browsers set bold. */
+@import '@fontsource/ibm-plex-sans-arabic/arabic-400.css';
+@import '@fontsource/ibm-plex-sans-arabic/arabic-500.css';
+@import '@fontsource/ibm-plex-sans-arabic/arabic-600.css';
+@import '@fontsource/ibm-plex-sans-arabic/arabic-700.css';
+@import '@fontsource/ibm-plex-sans-arabic/latin-400.css';
+@import '@fontsource/ibm-plex-sans-arabic/latin-500.css';
+@import '@fontsource/ibm-plex-sans-arabic/latin-600.css';
+@import '@fontsource/ibm-plex-sans-arabic/latin-700.css';
 
 :root {
   --font: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, sans-serif;
