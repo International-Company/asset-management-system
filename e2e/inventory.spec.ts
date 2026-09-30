@@ -46,7 +46,7 @@ test('Asset Manager runs an inventory: scan, check, not found, close with offici
   // First asset: "scanned" by typing its number.
   await page.getByRole('button', { name: 'مسح أصل' }).click();
   await page.getByLabel(/أو أدخل رقم الأصل/).fill(numbers[0]);
-  await page.getByRole('dialog').getByRole('button', { name: 'بحث' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'بحث', exact: true }).click();
   await page.getByRole('dialog', { name: new RegExp(numbers[0]) }).getByRole('button', { name: 'حفظ الفحص' }).click();
   await expect(page.getByText('فُحص 1 من 2')).toBeVisible();
 

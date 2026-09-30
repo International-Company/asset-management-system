@@ -9,6 +9,7 @@ import { useQueueCounts } from '../pages/offline/OfflinePages';
 import { useAutoSync } from '../offline/sync';
 import { ConfirmDialog, Modal } from './Modal';
 import { MenuIcon, NotificationsMenu, UserMenu } from './TopbarMenus';
+import { GlobalSearch, QrScanButton } from './TopbarSearch';
 
 interface NavItem {
   to: string;
@@ -202,7 +203,9 @@ export function AppShell() {
           <MenuIcon />
         </button>
         <span className="company">{me?.company.nameAr}</span>
+        <GlobalSearch pages={sections.flatMap((sec) => sec.items.map((i) => ({ to: i.to, label: i.label, section: sec.title })))} />
         <span className="spacer" />
+        {can(PERMISSIONS.ASSETS_VIEW) && <QrScanButton />}
         {(unsynced > 0 || !online) && (
           <Link
             className="topbar-chip"

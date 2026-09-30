@@ -52,7 +52,7 @@ test('custody: manager hands over, receiver confirms from the home page, officia
     await manager.page.goto(url);
     await manager.page.getByRole('link', { name: 'تسليم عهدة' }).click();
     await manager.page.getByLabel('ابحث عن موظف').fill('كريم');
-    await manager.page.getByRole('button', { name: 'بحث' }).first().click();
+    await manager.page.getByRole('button', { name: 'بحث', exact: true }).first().click();
     await manager.page.getByRole('listitem').filter({ hasText: 'كريم يوسف' }).getByRole('button', { name: 'اختيار' }).click();
     await manager.page.getByRole('button', { name: 'إنشاء المحضر' }).click();
     await expect(manager.page.getByText(/بانتظار تأكيد كريم يوسف/)).toBeVisible();

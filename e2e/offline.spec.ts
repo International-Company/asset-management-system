@@ -58,7 +58,7 @@ test('offline inventory: check without network, survive a reload, sync on reconn
   // First asset: found by its number.
   await page.getByRole('button', { name: 'مسح QR' }).click();
   await page.getByLabel(/أو أدخل رقم الأصل/).fill(numbers[0]);
-  await page.getByRole('dialog').getByRole('button', { name: 'بحث' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'بحث', exact: true }).click();
   await page.getByRole('dialog', { name: new RegExp(numbers[0]) }).getByRole('button', { name: 'حفظ الفحص' }).click();
   // Second asset: recorded as not found.
   await page.getByRole('row', { name: new RegExp(numbers[1]) }).getByRole('button', { name: 'فحص' }).click();
@@ -122,7 +122,7 @@ test('offline start in a new tab, QR lookup with photo and note, failed sync the
 
   // The scanned QR content is the /qr/{token} link printed on the label.
   await tab.getByLabel(/أو أدخل رقم الأصل/).fill(`https://assets.example/qr/${asset.qrToken}`);
-  await tab.getByRole('button', { name: 'بحث' }).click();
+  await tab.getByRole('button', { name: 'بحث', exact: true }).click();
   await expect(tab.getByRole('heading', { name: /جهاز عرض ميداني/ })).toBeVisible();
   await tab.getByLabel('ملاحظات الأصل').fill('الملصق باهت ويحتاج استبدالًا');
   await tab.getByRole('button', { name: 'حفظ الملاحظات' }).click();

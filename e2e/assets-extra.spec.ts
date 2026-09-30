@@ -67,7 +67,7 @@ test('serial numbers are unique: creating or changing to a used serial shows an 
   await page.getByLabel('الموقع *').selectOption({ label: 'المقر الرئيسي' });
   await page.getByLabel('القسم *').selectOption({ label: 'تقنية المعلومات' });
   await page.getByLabel('ابحث عن موظف').fill('ليلى');
-  await page.getByRole('button', { name: 'بحث' }).click();
+  await page.getByRole('button', { name: 'بحث', exact: true }).click();
   await page.getByRole('listitem').filter({ hasText: 'ليلى حسن' }).getByRole('button', { name: 'اختيار' }).click();
   await page.getByRole('button', { name: 'حفظ الأصل' }).click();
   // Shown in the form alert and next to the field.

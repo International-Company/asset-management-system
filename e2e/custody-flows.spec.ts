@@ -112,7 +112,7 @@ test('custody return: new responsible and condition apply at once, with an offic
   await expect(page.getByRole('heading', { name: 'محضر إرجاع جديد' })).toBeVisible();
   await page.getByLabel('الحالة عند الإرجاع').selectOption({ label: 'تالف' });
   await page.getByLabel('ابحث عن موظف').fill('رنا');
-  await page.getByRole('button', { name: 'بحث' }).last().click();
+  await page.getByRole('button', { name: 'بحث', exact: true }).last().click();
   await page.getByRole('listitem').filter({ hasText: 'رنا عمر' }).getByRole('button', { name: 'اختيار' }).click();
   await page.getByRole('button', { name: 'تسجيل الإرجاع' }).click();
 

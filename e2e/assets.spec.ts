@@ -27,7 +27,7 @@ async function createAsset(page: Page, name: string) {
   await page.getByLabel('القسم *').selectOption({ label: 'تقنية المعلومات' });
   await page.getByLabel('الشركة المصنعة').fill('Dell');
   await page.getByLabel('ابحث عن موظف').fill('ليلى');
-  await page.getByRole('button', { name: 'بحث' }).click();
+  await page.getByRole('button', { name: 'بحث', exact: true }).click();
   await page.getByRole('listitem').filter({ hasText: 'ليلى حسن' }).getByRole('button', { name: 'اختيار' }).click();
   await page.getByRole('button', { name: 'حفظ الأصل' }).click();
   await expect(page.getByRole('heading', { name: new RegExp(name) })).toBeVisible();
