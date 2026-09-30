@@ -48,8 +48,8 @@ test('the receiver of a custody sees an unread notification that links to the re
   const context = await browser.newContext({ baseURL: 'http://localhost:4173' });
   const receiver = await context.newPage();
   await login(receiver, 'viewer');
-  await receiver.getByRole('banner').getByRole('link', { name: /الإشعارات: \d+ غير مقروء/ }).click();
-  await receiver.getByRole('link', { name: new RegExp(custody.number) }).click();
+  await receiver.getByRole('banner').getByRole('button', { name: /الإشعارات: \d+ غير مقروء/ }).click();
+  await receiver.getByRole('dialog', { name: 'الإشعارات' }).getByRole('button', { name: new RegExp(custody.number) }).click();
   await expect(receiver.getByRole('heading', { name: new RegExp(custody.number) })).toBeVisible();
   await context.close();
 });

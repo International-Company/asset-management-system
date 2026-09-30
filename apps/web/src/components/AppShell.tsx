@@ -8,6 +8,7 @@ import { useUnreadCount } from '../pages/NotificationsPage';
 import { useQueueCounts } from '../pages/offline/OfflinePages';
 import { useAutoSync } from '../offline/sync';
 import { ConfirmDialog, Modal } from './Modal';
+import { MenuIcon, NotificationsMenu, UserMenu } from './TopbarMenus';
 
 interface NavItem {
   to: string;
@@ -187,56 +188,35 @@ export function AppShell() {
             ),
           )}
         </nav>
-        {/* On phones the theme toggle lives in the drawer to keep the top bar on one line. */}
-        <button type="button" className="btn sidebar-theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-          {theme === 'dark' ? 'المظهر الفاتح' : 'المظهر الداكن'}
-        </button>
       </aside>
       {drawerOpen && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} />}
 
       <header className="topbar">
         <button
           type="button"
-          className="btn"
+          className="icon-btn"
           onClick={toggleSidebar}
           aria-label={collapsed ? 'توسيع القائمة' : 'طي القائمة'}
           aria-expanded={!collapsed || drawerOpen}
         >
-          القائمة
+          <MenuIcon />
         </button>
         <span className="company">{me?.company.nameAr}</span>
         <span className="spacer" />
-        <button
-          type="button"
-          className="btn topbar-theme"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          aria-label="تبديل المظهر"
-        >
-          <span className="label-long">{theme === 'dark' ? 'المظهر الفاتح' : 'المظهر الداكن'}</span>
-          <span className="label-short">{theme === 'dark' ? 'فاتح' : 'داكن'}</span>
-        </button>
-        <Link className="btn" to="/notifications" aria-label={unreadCount ? `الإشعارات: ${unreadCount} غير مقروء` : 'الإشعارات'}>
-          <span className="label-long">الإشعارات</span>
-          <span className="label-short">إشعارات</span>
-          {unreadCount > 0 && <span className="badge badge-danger">{unreadCount > 99 ? '99+' : unreadCount}</span>}
-        </Link>
         {(unsynced > 0 || !online) && (
           <Link
-            className="btn topbar-sync"
+            className="topbar-chip"
             to="/offline"
             aria-label={queue.review ? `المزامنة: ${queue.pending} بانتظار المزامنة، ${queue.review} تحتاج مراجعة` : `المزامنة: ${queue.pending} بانتظار المزامنة`}
           >
             <span className="label-long">بانتظار المزامنة</span>
-            <span className="label-short">مزامنة</span>
             <span className="badge badge-warning">{queue.pending}</span>
             {queue.review > 0 && <span className="badge badge-danger">{queue.review}</span>}
           </Link>
         )}
-        <span className="user-name">{me?.fullName}</span>
-        <button type="button" className="btn" onClick={requestLogout} aria-label="تسجيل الخروج">
-          <span className="label-long">تسجيل الخروج</span>
-          <span className="label-short">خروج</span>
-        </button>
+        <NotificationsMenu unread={unreadCount} />
+        <span className="topbar-divider" aria-hidden="true" />
+        {me && <UserMenu me={me} theme={theme} onTheme={setTheme} onLogout={requestLogout} />}
       </header>
 
       <main className="content">

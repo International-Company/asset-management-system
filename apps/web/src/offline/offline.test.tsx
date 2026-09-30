@@ -208,7 +208,8 @@ describe('Offline pages', () => {
     expect(calls.some((c) => c.key.startsWith('POST /sync'))).toBe(false);
 
     // Logging out needs the network.
-    await user.click(screen.getByRole('button', { name: 'تسجيل الخروج' }));
+    await user.click(screen.getByRole('button', { name: /قائمة المستخدم/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'تسجيل الخروج' }));
     expect(within(screen.getByRole('dialog')).getByText(/يتطلب اتصالًا بالشبكة/)).toBeInTheDocument();
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'إغلاق' }));
 
@@ -235,7 +236,8 @@ describe('Offline pages', () => {
     const user = userEvent.setup();
     renderApp(<App />, { route: '/offline' });
     await screen.findByRole('link', { name: 'المزامنة: 1 بانتظار المزامنة' });
-    await user.click(screen.getByRole('button', { name: 'تسجيل الخروج' }));
+    await user.click(screen.getByRole('button', { name: /قائمة المستخدم/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'تسجيل الخروج' }));
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveTextContent('توجد 1 عملية على هذا الجهاز لم تصل إلى الخادم');
     await user.click(within(dialog).getByRole('button', { name: 'تسجيل الخروج وحذفها' }));

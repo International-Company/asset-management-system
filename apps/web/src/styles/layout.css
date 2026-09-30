@@ -12,14 +12,17 @@
   grid-template-columns: var(--sidebar-collapsed) 1fr;
 }
 
+/* Top bar: menu toggle and company on the start side; sync, notifications and the
+ * user menu on the end side. Popups hang below it, so it must not clip. */
 .topbar {
   grid-area: topbar;
+  position: relative;
+  z-index: 10;
   min-inline-size: 0;
-  overflow: hidden;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding-inline: 1rem;
+  gap: 0.5rem;
+  padding-inline: 0.75rem 1rem;
   background: var(--surface);
   border-block-end: 1px solid var(--border);
 }
@@ -33,41 +36,401 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.topbar .btn {
-  white-space: nowrap;
-  flex-shrink: 0;
-}
 .label-short {
   display: none;
 }
+.sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
-/* Phones: compact top bar so actions stay on one line. */
+/* Square icon buttons (menu, notifications). */
+.icon-btn {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  inline-size: 38px;
+  block-size: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.icon-btn:hover,
+.icon-btn[aria-expanded='true'] {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+.icon-btn:focus-visible,
+.user-trigger:focus-visible,
+.topbar-chip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+/* Sits on the bell's top corner (the reading-end side), not over the bell. */
+.icon-btn-count {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-end: calc(50% + 1px);
+  translate: 50% 0;
+  min-inline-size: 17px;
+  block-size: 17px;
+  padding-inline: 4px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--surface);
+  font-variant-numeric: tabular-nums;
+}
+.topbar-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  block-size: 32px;
+  padding-inline: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 0.85rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.topbar-chip:hover {
+  background: var(--surface-muted);
+}
+.topbar-divider {
+  inline-size: 1px;
+  block-size: 24px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* The user button: avatar, name and role, chevron. */
+.user-trigger {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-block: 4px;
+  padding-inline: 4px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  max-inline-size: 260px;
+}
+.user-trigger:hover,
+.user-trigger[aria-expanded='true'] {
+  background: var(--surface-muted);
+}
+.avatar {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.avatar-lg {
+  inline-size: 40px;
+  block-size: 40px;
+  font-size: 0.9rem;
+}
+.user-meta {
+  display: grid;
+  min-inline-size: 0;
+  text-align: start;
+  line-height: 1.25;
+}
+.user-meta-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-meta-role {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.user-chevron {
+  display: inline-grid;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+.user-trigger[aria-expanded='true'] .user-chevron {
+  transform: rotate(180deg);
+}
+
+/* Popups (user menu, notifications) hang from the end side of their trigger. */
+.popup-anchor {
+  position: relative;
+  flex-shrink: 0;
+}
+.popup {
+  position: absolute;
+  inset-block-start: calc(100% + 8px);
+  inset-inline-end: 0;
+  z-index: 30;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgb(15 23 42 / 0.14), 0 2px 6px rgb(15 23 42 / 0.08);
+  animation: popup-in 0.12s ease-out;
+}
+@keyframes popup-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.menu {
+  inline-size: 260px;
+  padding: 6px;
+}
+.menu-header {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.6rem 0.7rem;
+}
+.menu-header-text {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.menu-header-text strong {
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu-header-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.menu-separator {
+  block-size: 1px;
+  margin-block: 4px;
+  background: var(--border);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  inline-size: 100%;
+  padding: 0.55rem 0.6rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+.menu-item > span:first-of-type {
+  flex: 1;
+}
+.menu-item svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--surface-muted);
+  outline: none;
+}
+.menu-item:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+.menu-item-danger,
+.menu-item-danger svg {
+  color: var(--danger);
+}
+.menu-item-danger:hover,
+.menu-item-danger:focus-visible {
+  background: var(--danger-soft);
+}
+/* On/off switch inside the theme item. */
+.switch {
+  position: relative;
+  inline-size: 30px;
+  block-size: 18px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-start: 2px;
+  inline-size: 14px;
+  block-size: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: inset-inline-start 0.15s ease;
+}
+[aria-checked='true'] > .switch {
+  background: var(--primary);
+}
+[aria-checked='true'] > .switch::after {
+  inset-inline-start: 14px;
+}
+
+/* Notifications panel. */
+.notif-panel {
+  inline-size: 360px;
+  max-inline-size: calc(100vw - 24px);
+  display: grid;
+  overflow: hidden;
+}
+.notif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-block-end: 1px solid var(--border);
+}
+.notif-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-block-size: min(60vh, 420px);
+  overflow-y: auto;
+}
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  inline-size: 100%;
+  padding: 0.6rem 0.65rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.notif-item:hover,
+.notif-item:focus-visible {
+  background: var(--surface-muted);
+  outline: none;
+}
+.notif-item:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+.notif-dot {
+  flex-shrink: 0;
+  inline-size: 8px;
+  block-size: 8px;
+  margin-block-start: 0.45rem;
+  border-radius: 50%;
+  background: transparent;
+}
+.notif-item[data-unread='true'] .notif-dot {
+  background: var(--primary);
+}
+.notif-text {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.notif-title {
+  font-size: 0.88rem;
+}
+.notif-item[data-unread='true'] .notif-title {
+  font-weight: 600;
+}
+.notif-body {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notif-time {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+.notif-empty {
+  margin: 0;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.notif-foot {
+  display: block;
+  padding: 0.65rem 1rem;
+  border-block-start: 1px solid var(--border);
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--primary);
+  text-decoration: none;
+}
+.notif-foot:hover {
+  background: var(--surface-muted);
+}
+
+/* Phones: avatar and bell only; the popups span the width. */
 @media (max-width: 640px) {
   .topbar {
-    gap: 0.4rem;
-    padding-inline: 0.6rem;
+    gap: 0.35rem;
+    padding-inline: 0.5rem;
   }
-  .topbar .btn {
-    padding: 0 0.6rem;
-  }
+  .user-meta,
+  .user-chevron,
+  .topbar-divider,
   .label-long {
     display: none;
   }
-  .label-short {
-    display: inline;
+  .user-trigger {
+    padding: 3px;
   }
-  .topbar-sync .label-short,
-  .topbar-theme {
-    display: none;
+  .popup-anchor {
+    position: static;
+  }
+  .popup {
+    inset-inline: 8px;
+    inline-size: auto;
+  }
+  .topbar-chip {
+    padding-inline: 0.5rem;
   }
 }
-.sidebar-theme {
-  display: none;
-}
-@media (max-width: 640px) {
-  .sidebar-theme {
-    display: block;
-    margin: 0.75rem;
+@media (prefers-reduced-motion: reduce) {
+  .popup {
+    animation: none;
+  }
+  .user-chevron,
+  .switch,
+  .switch::after {
+    transition: none;
   }
 }
 
@@ -304,9 +667,6 @@ main.content {
   }
   main.content {
     padding: 1rem;
-  }
-  .topbar .user-name {
-    display: none;
   }
 }
 @media (min-width: 901px) {

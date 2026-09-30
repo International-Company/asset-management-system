@@ -52,7 +52,8 @@ test('first sign-in registers the fingerprint, the next one signs in with it, an
   await expect(section.getByRole('row')).toHaveCount(2); // header + one device
   await expect(section.getByRole('button', { name: 'حذف' })).toBeDisabled();
 
-  await page.getByRole('button', { name: 'تسجيل الخروج' }).click();
+  await page.getByRole('button', { name: /قائمة المستخدم/ }).click();
+  await page.getByRole('menuitem', { name: 'تسجيل الخروج' }).click();
   await expect(page.getByLabel('اسم المستخدم')).toBeVisible();
 
   // Next sign-in: the same device signs the new challenge.

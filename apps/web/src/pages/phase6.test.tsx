@@ -89,13 +89,13 @@ describe('Notifications', () => {
     const user = userEvent.setup();
     renderApp(<App />, { route: '/notifications' });
     const topBar = await screen.findByRole('banner');
-    expect(await within(topBar).findByRole('link', { name: 'الإشعارات: 2 غير مقروء' })).toBeInTheDocument();
+    expect(await within(topBar).findByRole('button', { name: 'الإشعارات: 2 غير مقروء' })).toBeInTheDocument();
     expect(await screen.findByRole('link', { name: /CUS-000009/ })).toHaveAttribute('href', '/custodies/c1');
     // No delete control exists.
     expect(screen.queryByRole('button', { name: /حذف/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'تعليم الكل كمقروء' }));
     await waitFor(() => expect(calls.some((c) => c.key === 'POST /notifications/read-all')).toBe(true));
-    expect(await within(topBar).findByRole('link', { name: 'الإشعارات' })).toBeInTheDocument();
+    expect(await within(topBar).findByRole('button', { name: 'الإشعارات' })).toBeInTheDocument();
   });
 });
 

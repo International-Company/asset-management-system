@@ -53,7 +53,8 @@ test('wrong password shows an Arabic error', async ({ page }) => {
 test('logout returns to the login page and the session no longer works', async ({ page }) => {
   await login(page, 'viewer');
   await expect(page.getByRole('heading', { name: /مرحبًا/ })).toBeVisible();
-  await page.getByRole('button', { name: 'تسجيل الخروج' }).click();
+  await page.getByRole('button', { name: /قائمة المستخدم/ }).click();
+  await page.getByRole('menuitem', { name: 'تسجيل الخروج' }).click();
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
   const res = await page.request.get('/api/v1/auth/me');
   expect(res.status()).toBe(401);
