@@ -1,4 +1,5 @@
-import { type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, useId } from 'react';
+import { type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, useId, type ChangeEvent } from 'react';
+import { DatePicker } from './DatePicker';
 import { ApiError } from '../lib/api';
 
 /** Field-level messages from a failed API call (ApiError.fields), keyed by field name. */
@@ -48,7 +49,21 @@ export function TextField({
 }: { label: string; error?: string[]; hint?: string } & InputHTMLAttributes<HTMLInputElement>) {
   return (
     <Field label={label} error={error} hint={hint}>
-      {(a11y) => <input className="input" {...a11y} {...input} />}
+      {(a11y) =>
+        input.type === 'date' ? (
+          // The app's own date picker; same ISO value and change event shape as a native date input.
+          <DatePicker
+            {...a11y}
+            value={String(input.value ?? '')}
+            min={input.min as string | undefined}
+            max={input.max as string | undefined}
+            disabled={input.disabled}
+            onChange={(v) => input.onChange?.({ target: { value: v }, currentTarget: { value: v } } as ChangeEvent<HTMLInputElement>)}
+          />
+        ) : (
+          <input className="input" {...a11y} {...input} />
+        )
+      }
     </Field>
   );
 }
