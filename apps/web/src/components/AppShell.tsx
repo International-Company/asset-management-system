@@ -8,14 +8,15 @@ import { useUnreadCount } from '../pages/NotificationsPage';
 import { useQueueCounts } from '../pages/offline/OfflinePages';
 import { useAutoSync } from '../offline/sync';
 import { ConfirmDialog, Modal } from './Modal';
+import { NavIcon, type NavIconName } from './NavIcons';
 import { MenuIcon, NotificationsMenu, UserMenu } from './TopbarMenus';
 import { GlobalSearch, QrScanButton } from './TopbarSearch';
 
 interface NavItem {
   to: string;
   label: string;
-  /** Short text shown when the sidebar is collapsed (text-first, no icons). */
-  abbr: string;
+  /** Shown beside the label, and alone (with a tooltip) when the sidebar is collapsed. */
+  icon: NavIconName;
   permission?: PermissionKey;
 }
 
@@ -29,50 +30,50 @@ export const NAV: NavSection[] = [
   {
     title: 'عام',
     items: [
-      { to: '/', label: 'الرئيسية', abbr: 'ر' },
-      { to: '/assets', label: 'الأصول', abbr: 'أ', permission: PERMISSIONS.ASSETS_VIEW },
-      { to: '/offline', label: 'العمل بدون اتصال', abbr: 'غ' },
+      { to: '/', label: 'الرئيسية', icon: 'home' },
+      { to: '/assets', label: 'الأصول', icon: 'assets', permission: PERMISSIONS.ASSETS_VIEW },
+      { to: '/offline', label: 'العمل بدون اتصال', icon: 'offline' },
     ],
   },
   {
     title: 'العمليات',
     items: [
-      { to: '/custodies', label: 'محاضر العهدة', abbr: 'ع', permission: PERMISSIONS.CUSTODY_VIEW },
-      { to: '/custody-returns', label: 'محاضر الإرجاع', abbr: 'ج', permission: PERMISSIONS.CUSTODY_VIEW },
-      { to: '/transfers', label: 'النقل', abbr: 'ن', permission: PERMISSIONS.TRANSFERS_VIEW },
-      { to: '/inventories', label: 'الجرد', abbr: 'د', permission: PERMISSIONS.INVENTORY_VIEW },
-      { to: '/maintenances', label: 'الصيانة', abbr: 'ص', permission: PERMISSIONS.MAINTENANCE_VIEW },
-      { to: '/sales', label: 'المبيعات', abbr: 'ب', permission: PERMISSIONS.SALES_VIEW },
+      { to: '/custodies', label: 'محاضر العهدة', icon: 'custody', permission: PERMISSIONS.CUSTODY_VIEW },
+      { to: '/custody-returns', label: 'محاضر الإرجاع', icon: 'returns', permission: PERMISSIONS.CUSTODY_VIEW },
+      { to: '/transfers', label: 'النقل', icon: 'transfers', permission: PERMISSIONS.TRANSFERS_VIEW },
+      { to: '/inventories', label: 'الجرد', icon: 'inventory', permission: PERMISSIONS.INVENTORY_VIEW },
+      { to: '/maintenances', label: 'الصيانة', icon: 'maintenance', permission: PERMISSIONS.MAINTENANCE_VIEW },
+      { to: '/sales', label: 'المبيعات', icon: 'sales', permission: PERMISSIONS.SALES_VIEW },
     ],
   },
   {
     title: 'التقارير',
-    items: [{ to: '/reports', label: 'التقارير', abbr: 'ق', permission: PERMISSIONS.REPORTS_VIEW }],
+    items: [{ to: '/reports', label: 'التقارير', icon: 'reports', permission: PERMISSIONS.REPORTS_VIEW }],
   },
   {
     title: 'الإدارة',
     items: [
-      { to: '/dashboard', label: 'لوحة التحكم', abbr: 'ت', permission: PERMISSIONS.DASHBOARD_VIEW },
-      { to: '/admin/users', label: 'المستخدمون', abbr: 'م', permission: PERMISSIONS.USERS_VIEW },
-      { to: '/admin/roles', label: 'الأدوار والصلاحيات', abbr: 'د', permission: PERMISSIONS.ROLES_MANAGE },
-      { to: '/admin/categories', label: 'الفئات', abbr: 'ف', permission: PERMISSIONS.CATEGORIES_MANAGE },
-      { to: '/admin/locations', label: 'المواقع والأقسام', abbr: 'و', permission: PERMISSIONS.LOCATIONS_MANAGE },
-      { to: '/admin/external-people', label: 'المسؤولون الخارجيون', abbr: 'خ', permission: PERMISSIONS.EXTERNAL_PEOPLE_VIEW },
-      { to: '/admin/settings', label: 'الإعدادات', abbr: 'إ', permission: PERMISSIONS.SETTINGS_MANAGE },
+      { to: '/dashboard', label: 'لوحة التحكم', icon: 'dashboard', permission: PERMISSIONS.DASHBOARD_VIEW },
+      { to: '/admin/users', label: 'المستخدمون', icon: 'users', permission: PERMISSIONS.USERS_VIEW },
+      { to: '/admin/roles', label: 'الأدوار والصلاحيات', icon: 'roles', permission: PERMISSIONS.ROLES_MANAGE },
+      { to: '/admin/categories', label: 'الفئات', icon: 'categories', permission: PERMISSIONS.CATEGORIES_MANAGE },
+      { to: '/admin/locations', label: 'المواقع والأقسام', icon: 'locations', permission: PERMISSIONS.LOCATIONS_MANAGE },
+      { to: '/admin/external-people', label: 'المسؤولون الخارجيون', icon: 'external', permission: PERMISSIONS.EXTERNAL_PEOPLE_VIEW },
+      { to: '/admin/settings', label: 'الإعدادات', icon: 'settings', permission: PERMISSIONS.SETTINGS_MANAGE },
     ],
   },
   {
     title: 'السجلات',
     items: [
-      { to: '/admin/audit', label: 'سجل التدقيق', abbr: 'س', permission: PERMISSIONS.AUDIT_VIEW },
-      { to: '/admin/security-log', label: 'السجل الأمني', abbr: 'ن', permission: PERMISSIONS.SECURITY_VIEW },
+      { to: '/admin/audit', label: 'سجل التدقيق', icon: 'audit', permission: PERMISSIONS.AUDIT_VIEW },
+      { to: '/admin/security-log', label: 'السجل الأمني', icon: 'security', permission: PERMISSIONS.SECURITY_VIEW },
     ],
   },
   {
     title: 'حسابي',
     items: [
-      { to: '/notifications', label: 'الإشعارات', abbr: 'ش' },
-      { to: '/account/sessions', label: 'جلساتي', abbr: 'ج' },
+      { to: '/notifications', label: 'الإشعارات', icon: 'notifications' },
+      { to: '/account/sessions', label: 'جلساتي', icon: 'sessions' },
     ],
   },
 ];
@@ -81,12 +82,26 @@ function isActive(to: string, pathname: string): boolean {
   return to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`);
 }
 
-function NavItem({ item }: { item: NavItem }) {
+/** Shows the page name beside an icon when the sidebar is collapsed (fixed, so the scrolling list cannot clip it). */
+type ShowTip = ((tip: { label: string; top: number; right: number } | null) => void) | undefined;
+
+function NavItem({ item, onTip }: { item: NavItem; onTip?: ShowTip }) {
+  const show = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    onTip?.({ label: item.label, top: r.top + r.height / 2, right: window.innerWidth - r.left + 10 });
+  };
   return (
     <li>
-      <NavLink to={item.to} end={item.to === '/'} title={item.label}>
-        <span className="nav-abbr" aria-hidden="true">
-          {item.abbr}
+      <NavLink
+        to={item.to}
+        end={item.to === '/'}
+        onMouseEnter={(e) => show(e.currentTarget)}
+        onFocus={(e) => show(e.currentTarget)}
+        onMouseLeave={() => onTip?.(null)}
+        onBlur={() => onTip?.(null)}
+      >
+        <span className="nav-icon">
+          <NavIcon name={item.icon} />
         </span>
         <span className="nav-label">{item.label}</span>
       </NavLink>
@@ -98,7 +113,7 @@ function NavItem({ item }: { item: NavItem }) {
  * A sidebar group that folds open and closed. Closed items are `inert`: out of
  * the tab order and hidden from screen readers, not merely clipped.
  */
-function NavGroup({ section, active, open, flat, onToggle }: { section: NavSection; active: boolean; open: boolean; flat: boolean; onToggle: (open: boolean) => void }) {
+function NavGroup({ section, active, open, flat, onToggle, onTip }: { section: NavSection; active: boolean; open: boolean; flat: boolean; onToggle: (open: boolean) => void; onTip?: ShowTip }) {
   const id = useId();
   return (
     <div className="nav-group" data-open={open}>
@@ -110,7 +125,7 @@ function NavGroup({ section, active, open, flat, onToggle }: { section: NavSecti
       <div className="nav-group-body" id={id} inert={!open && !flat}>
         <ul className="nav-list">
           {section.items.map((item) => (
-            <NavItem key={item.to} item={item} />
+            <NavItem key={item.to} item={item} onTip={onTip} />
           ))}
         </ul>
       </div>
@@ -133,6 +148,7 @@ export function AppShell() {
   const narrow = useMediaQuery('(max-width: 900px)');
   // Collapsed desktop sidebar lists every item as a shortcut, without groups.
   const flatNav = collapsed && !narrow;
+  const [tip, setTip] = useState<{ label: string; top: number; right: number } | null>(null);
   // Opening a page from elsewhere (a link, the address bar) opens its group.
   useEffect(() => {
     const group = NAV.find((s) => s.items.length > 1 && s.items.some((i) => isActive(i.to, location.pathname)));
@@ -170,12 +186,12 @@ export function AppShell() {
           {me?.company.logoFileId && <img src={fileUrl(me.company.logoFileId)} alt="" className="brand-logo" />}
           <span>نظام إدارة الأصول</span>
         </div>
-        <nav className="nav">
+        <nav className="nav" onScroll={() => setTip(null)}>
           {sections.map((section) =>
             section.items.length === 1 ? (
               // A one-item group is just a link; a toggle around it would only add a click.
               <ul className="nav-list nav-single" key={section.title}>
-                <NavItem item={section.items[0]} />
+                <NavItem item={section.items[0]} onTip={flatNav ? setTip : undefined} />
               </ul>
             ) : (
               <NavGroup
@@ -184,12 +200,18 @@ export function AppShell() {
                 active={section.items.some((i) => isActive(i.to, location.pathname))}
                 open={isGroupOpen(section.title, section.items.some((i) => isActive(i.to, location.pathname)))}
                 flat={flatNav}
+                onTip={flatNav ? setTip : undefined}
                 onToggle={(open) => setGroupOpen(section.title, open)}
               />
             ),
           )}
         </nav>
       </aside>
+      {flatNav && tip && (
+        <div className="nav-tooltip" role="tooltip" style={{ top: tip.top, right: tip.right }}>
+          {tip.label}
+        </div>
+      )}
       {drawerOpen && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} />}
 
       <header className="topbar">

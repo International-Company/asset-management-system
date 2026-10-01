@@ -581,18 +581,58 @@
     transition: none;
   }
 }
-.nav-abbr {
-  display: none;
-  inline-size: 2rem;
-  text-align: center;
-  font-weight: 600;
+/* Page icons: beside the label, muted; the page you are on takes the accent colour. */
+.nav-icon {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  inline-size: 20px;
+  block-size: 20px;
+  color: var(--text-muted);
 }
-.shell[data-collapsed='true'] .nav-label,
+.nav a:hover .nav-icon {
+  color: var(--text);
+}
+.nav a[aria-current='page'] .nav-icon {
+  color: var(--primary);
+}
 .shell[data-collapsed='true'] .sidebar-brand span {
   display: none;
 }
-.shell[data-collapsed='true'] .nav-abbr {
-  display: inline-block;
+/* Collapsed: icons only, centred. The label stays for screen readers. */
+.shell[data-collapsed='true'] .nav-label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.shell[data-collapsed='true'] .nav a {
+  justify-content: center;
+  padding-inline: 0;
+  block-size: 40px;
+}
+.shell[data-collapsed='true'] .nav-icon {
+  color: var(--text);
+}
+.shell[data-collapsed='true'] .nav a[aria-current='page'] .nav-icon {
+  color: var(--primary);
+}
+/* The page name beside a hovered or focused icon (collapsed sidebar). */
+.nav-tooltip {
+  position: fixed;
+  z-index: 50;
+  translate: 0 -50%;
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--surface);
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 0.18);
 }
 .shell[data-collapsed='true'] .nav-group-toggle {
   display: none;
@@ -641,12 +681,23 @@ main.content {
   .shell[data-drawer-open='true'] .sidebar {
     transform: none;
   }
-  .shell[data-collapsed='true'] .nav-label,
   .shell[data-collapsed='true'] .sidebar-brand span {
     display: revert;
   }
-  .shell[data-collapsed='true'] .nav-abbr {
-    display: none;
+  .shell[data-collapsed='true'] .nav-label {
+    position: static;
+    inline-size: auto;
+    block-size: auto;
+    overflow: visible;
+    clip-path: none;
+  }
+  .shell[data-collapsed='true'] .nav a {
+    justify-content: flex-start;
+    padding-inline: 0.75rem;
+    block-size: auto;
+  }
+  .shell[data-collapsed='true'] .nav-icon {
+    color: var(--text-muted);
   }
   .shell[data-collapsed='true'] .nav-group-toggle {
     display: flex;
