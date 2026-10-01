@@ -2,10 +2,15 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#1d4f91" />
-    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <title>نظام إدارة الأصول</title>
+    <link rel="icon" href="/brand/favicon-64.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="أصولي" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>أصولي — نظام إدارة الأصول</title>
     <script>
       // Apply the saved theme before first paint to avoid a flash.
       try {
@@ -13,8 +18,140 @@
         if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
       } catch (e) {}
     </script>
+    <style>
+      /* Opening screen (phones): the logo with «أصولي» under it, shown before the
+         app's code loads and faded out once it is ready. Always on white: it is
+         the brand's own screen. */
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #ffffff;
+        transition: opacity 0.4s ease, visibility 0.4s ease;
+      }
+      html.splash-on #splash {
+        display: flex;
+      }
+      #splash.splash-out {
+        opacity: 0;
+        visibility: hidden;
+      }
+      #splash img {
+        inline-size: 116px;
+        block-size: auto;
+        animation: splash-logo 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+      }
+      #splash .splash-name {
+        font-family: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, sans-serif;
+        font-size: 30px;
+        font-weight: 700;
+        letter-spacing: 0;
+        color: #1d4f91;
+        animation: splash-name 0.6s ease 0.25s both;
+      }
+      #splash .splash-tagline {
+        margin-block-start: -10px;
+        font-family: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, sans-serif;
+        font-size: 14px;
+        color: #5a6878;
+        animation: splash-name 0.6s ease 0.4s both;
+      }
+      #splash .splash-bar {
+        position: absolute;
+        inset-block-end: calc(56px + env(safe-area-inset-bottom, 0px));
+        inline-size: 40px;
+        block-size: 3px;
+        border-radius: 3px;
+        background: #e8eef7;
+        overflow: hidden;
+      }
+      #splash .splash-bar::after {
+        content: '';
+        position: absolute;
+        inset-block: 0;
+        inline-size: 40%;
+        border-radius: 3px;
+        background: #1d4f91;
+        animation: splash-bar 1s ease-in-out infinite;
+      }
+      @keyframes splash-logo {
+        from {
+          opacity: 0;
+          transform: scale(0.86) translateY(8px);
+        }
+      }
+      @keyframes splash-name {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+      }
+      @keyframes splash-bar {
+        from {
+          inset-inline-start: -40%;
+        }
+        to {
+          inset-inline-start: 100%;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #splash img,
+        #splash .splash-name,
+        #splash .splash-tagline,
+        #splash .splash-bar::after {
+          animation: none;
+        }
+      }
+    </style>
+    <script>
+      // Show the opening screen in the installed app every launch, and in a phone
+      // browser once per session; never on desktop.
+      (function () {
+        var mq = function (q) {
+          return window.matchMedia && window.matchMedia(q).matches;
+        };
+        var installed = mq('(display-mode: standalone)') || window.navigator.standalone === true;
+        var phone = mq('(max-width: 900px)') && mq('(pointer: coarse)');
+        var seen = false;
+        try {
+          seen = sessionStorage.getItem('osooli.splash') === '1';
+          sessionStorage.setItem('osooli.splash', '1');
+        } catch (e) {}
+        if (!(installed || (phone && !seen))) return;
+        document.documentElement.classList.add('splash-on');
+        var shownAt = Date.now();
+        var done = false;
+        // Called by the app once it knows who is signed in (or after 5 s at most).
+        window.__hideSplash = function () {
+          if (done) return;
+          done = true;
+          var wait = Math.max(0, 1100 - (Date.now() - shownAt));
+          setTimeout(function () {
+            var el = document.getElementById('splash');
+            if (!el) return;
+            el.classList.add('splash-out');
+            setTimeout(function () {
+              document.documentElement.classList.remove('splash-on');
+              el.remove();
+            }, 450);
+          }, wait);
+        };
+        setTimeout(window.__hideSplash, 5000);
+      })();
+    </script>
   </head>
   <body>
+    <div id="splash" aria-hidden="true">
+      <img src="/brand/logo.png" alt="" width="211" height="274" />
+      <span class="splash-name">أصولي</span>
+      <span class="splash-tagline">نظام إدارة الأصول</span>
+      <span class="splash-bar"></span>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

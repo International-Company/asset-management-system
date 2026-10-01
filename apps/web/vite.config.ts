@@ -9,10 +9,10 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: false,
-      includeAssets: ['icon.svg'],
+      includeAssets: ['brand/logo.png', 'brand/favicon-64.png', 'brand/apple-touch-icon.png'],
       manifest: {
-        name: 'نظام إدارة الأصول',
-        short_name: 'الأصول',
+        name: 'أصولي — نظام إدارة الأصول',
+        short_name: 'أصولي',
         description: 'نظام إدارة أصول الشركة',
         lang: 'ar',
         dir: 'rtl',
@@ -20,15 +20,17 @@ export default defineConfig({
         display: 'standalone',
         background_color: '#ffffff',
         theme_color: '#1d4f91',
+        // Android builds its launch screen from these, the name and background_color.
         icons: [
-          { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-          { src: 'icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+          { src: 'brand/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'brand/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'brand/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {
         // App shell only. API responses are never cached by the service
         // worker; offline data is handled explicitly by the Offline module.
-        globPatterns: ['**/*.{js,css,html,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,woff2}', 'brand/*.png'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
       },

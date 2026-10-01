@@ -97,6 +97,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const me = query.data ?? null;
 
+  // The opening screen (index.html) fades out once we know who is signed in.
+  useEffect(() => {
+    if (!query.isPending) window.__hideSplash?.();
+  }, [query.isPending]);
+
   const can = useCallback(
     (...permissions: PermissionKey[]) => !!me && permissions.every((p) => me.permissions.includes(p)),
     [me],
