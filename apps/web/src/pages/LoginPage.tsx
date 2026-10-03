@@ -1,8 +1,11 @@
 import { FormEvent, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Navigate, useLocation } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { OFFER_FLAG, useQuickDevice } from '../components/QuickLogin';
+import { PinInput } from '../components/PinInput';
+import { forgetQuickDevice, type QuickDevice, quickSignIn } from '../lib/quickLogin';
 import { createPasskey, type FingerprintOptions, PasskeyCancelled, passkeysSupported, signWithPasskey } from '../lib/passkey';
 
 type Step = 'username' | 'password' | 'fingerprint';
@@ -31,6 +34,8 @@ export function LoginPage() {
   const [fingerprint, setFingerprint] = useState<FingerprintOptions | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [usePassword, setUsePassword] = useState(false);
+  const quick = useQuickDevice();
 
   const config = useQuery({
     queryKey: ['auth', 'config'],
@@ -41,6 +46,23 @@ export function LoginPage() {
   if (me) {
     const from = (location.state as { from?: string } | null)?.from ?? '/';
     return <Navigate to={from} replace />;
+  }
+
+  if (quick.isPending) return null;
+  if (quick.data && !usePassword) {
+    return (
+      <QuickPinLogin
+        device={quick.data}
+        companyName={config.data?.company.nameAr}
+        notice={signedOutReason}
+        onPassword={(message) => {
+          setUsePassword(true);
+          setUsername(quick.data?.username ?? '');
+          setError(message ?? null);
+        }}
+        onSignedIn={refresh}
+      />
+    );
   }
 
   const restart = (message?: string) => {
@@ -76,6 +98,11 @@ export function LoginPage() {
               ? await createPasskey(fingerprint.options)
               : assertion;
         await api('/auth/login/fingerprint', { method: 'POST', json: { challengeId, assertion: signed } });
+        try {
+          sessionStorage.setItem(OFFER_FLAG, '1');
+        } catch {
+          // No offer this time; it stays available in «جلساتي».
+        }
         await refresh();
       }
     } catch (err) {
@@ -211,6 +238,95 @@ export function LoginPage() {
             {busy ? 'جارٍ التحقق…' : step === 'fingerprint' ? (registering ? 'تسجيل البصمة' : usesPasskey ? 'التحقق بالبصمة' : 'دخول') : 'متابعة'}
           </button>
         </form>
+        {quick.data && step === 'username' && (
+          <div className="quick-alt">
+            <button type="button" className="btn-link" onClick={() => setUsePassword(false)}>
+              الدخول بالرمز
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Quick sign-in on a device set up for it: the name, four PIN boxes, nothing else. */
+function QuickPinLogin({
+  device,
+  companyName,
+  notice,
+  onPassword,
+  onSignedIn,
+}: {
+  device: QuickDevice;
+  companyName?: string;
+  notice: string | null;
+  onPassword: (message?: string) => void;
+  onSignedIn: () => Promise<unknown>;
+}) {
+  const queryClient = useQueryClient();
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function signIn(value: string) {
+    if (busy || value.length !== 4) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await quickSignIn(device, value);
+      await onSignedIn();
+    } catch (err) {
+      const apiErr = err instanceof ApiError ? err : null;
+      setPin('');
+      if (apiErr?.code === 'INVALID_STATE') {
+        // Revoked (too many wrong PINs, removed, or reset by an admin): back to the full sign-in.
+        await forgetQuickDevice();
+        await queryClient.invalidateQueries({ queryKey: ['quick-device'] });
+        onPassword(apiErr.message);
+        return;
+      }
+      setError(apiErr?.message ?? 'تعذر الدخول. تحقق من الاتصال ثم أعد المحاولة.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const initial = device.fullName.trim().charAt(0);
+  return (
+    <div className="center-page">
+      <div className="card center-card">
+        <h1>تسجيل الدخول</h1>
+        <p className="muted">{companyName ? `${companyName} — نظام إدارة الأصول` : 'نظام إدارة الأصول'}</p>
+        <div className="quick-who">
+          <span className="quick-avatar" aria-hidden="true">
+            {initial}
+          </span>
+          <span className="quick-name">{device.fullName}</span>
+          <span className="muted">أدخل رمز الدخول السريع</span>
+        </div>
+        {(error ?? notice) && (
+          <div className="alert alert-error" role="alert">
+            {error ?? notice}
+          </div>
+        )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void signIn(pin);
+          }}
+          noValidate
+        >
+          <PinInput id="quick-pin" label="رمز الدخول السريع" value={pin} onChange={setPin} onComplete={(v) => void signIn(v)} disabled={busy} autoFocus invalid={!!error} />
+          <button type="submit" className="btn btn-primary btn-block" style={{ marginBlockStart: '1.25rem' }} disabled={busy || pin.length < 4}>
+            {busy ? 'جارٍ التحقق…' : 'دخول'}
+          </button>
+        </form>
+        <div className="quick-alt">
+          <button type="button" className="btn-link" onClick={() => onPassword()}>
+            الدخول بكلمة المرور
+          </button>
+        </div>
       </div>
     </div>
   );

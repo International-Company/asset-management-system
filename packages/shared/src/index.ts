@@ -3,3 +3,4 @@ export * from './permissions.js';
 export * from './errors.js';
 export * from './numbering.js';
 export * from './labels.js';
+export * from './pin.js';

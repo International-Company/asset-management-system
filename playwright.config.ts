@@ -21,6 +21,12 @@ export default defineConfig({
     locale: 'ar',
     timezoneId: 'Asia/Hebron',
     trace: 'retain-on-failure',
+    // The quick sign-in offer after each full sign-in is turned off ("don't ask
+    // again"); e2e/quick-login.spec.ts turns it back on.
+    storageState: {
+      cookies: [],
+      origins: [`http://localhost:4173`, `http://localhost:${PASSKEY_WEB_PORT}`].map((origin) => ({ origin, localStorage: [{ name: 'osooli.quickNever', value: '1' }] })),
+    },
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },

@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsUUID, MaxLength, IsObject } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, MaxLength, IsObject, Matches } from 'class-validator';
 
 export class LoginStartDto {
   @IsString()
@@ -26,6 +26,41 @@ export class LoginFingerprintDto {
   @IsNotEmpty()
   @MaxLength(8192)
   assertion: string;
+}
+
+export class EnableQuickLoginDto {
+  /** The device's ECDSA P-256 public key (SPKI, base64). Its private key never leaves the device. */
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(512)
+  publicKey: string;
+
+  @IsString()
+  @Matches(/^\d{4}$/, { message: 'الرمز أربعة أرقام.' })
+  pin: string;
+}
+
+export class QuickChallengeDto {
+  @IsUUID()
+  deviceId: string;
+}
+
+export class QuickLoginDto {
+  @IsUUID()
+  deviceId: string;
+
+  @IsUUID()
+  challengeId: string;
+
+  /** The device's signature over the challenge (IEEE P1363, base64). */
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(256)
+  signature: string;
+
+  @IsString()
+  @Matches(/^\d{4}$/, { message: 'الرمز أربعة أرقام.' })
+  pin: string;
 }
 
 export class AddPasskeyDto {

@@ -99,7 +99,7 @@ export class AuthService {
       throw new AppError('FINGERPRINT_FAILED');
     }
 
-    await this.syncEmployee(user.employee.id, user.employee.eapEmployeeId);
+    await this.refreshEmployee(user.employee.id, user.employee.eapEmployeeId);
 
     return this.prisma.transaction(async (tx) => {
       // Consume the challenge exactly once (guards against replay/double submit).
@@ -178,8 +178,8 @@ export class AuthService {
     }
   }
 
-  /** Refreshes the cached employee record from EAP (spec §46). Failures never block login. */
-  private async syncEmployee(employeeId: string, eapEmployeeId: string): Promise<void> {
+  /** Refreshes the cached employee record from EAP (spec §46). Failures never block login (the cached record is used). */
+  async refreshEmployee(employeeId: string, eapEmployeeId: string): Promise<void> {
     try {
       const fresh = await this.eap.getEmployee(eapEmployeeId);
       if (!fresh) return;

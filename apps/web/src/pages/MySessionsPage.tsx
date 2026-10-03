@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth';
 import { formatDateTime } from '../lib/format';
 import { createPasskey, PasskeyCancelled, passkeysSupported } from '../lib/passkey';
 import { ConfirmDialog } from '../components/Modal';
+import { MyQuickLogin } from '../components/QuickLogin';
 import { Empty, ErrorState, Loading } from '../components/States';
 import { SessionStatusBadge, type SessionRow } from './sessions';
 
@@ -64,6 +65,7 @@ export function MySessionsPage() {
         </div>
       )}
       <MyPasskeys />
+      <MyQuickLogin />
     </>
   );
 }

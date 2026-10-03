@@ -23,6 +23,8 @@ const PUBLIC_ROUTES = [
   'POST /api/v1/auth/login/fingerprint',
   'POST /api/v1/auth/login/password',
   'POST /api/v1/auth/login/start',
+  'POST /api/v1/auth/quick/challenge',
+  'POST /api/v1/auth/quick/login',
 ];
 
 interface Route {

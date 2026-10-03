@@ -69,6 +69,18 @@ The spec leaves these open; each is enforced by the API and tested.
   - A fresh production database had no way to get its first administrator.
 - **Not verified on this machine:** the Docker images (Docker does not run here). CI builds them and now smoke-tests the web image.
 
+## Quick sign-in with a PIN (decided by the user, 2026-10-03)
+
+**Deviation from spec §47.** On a device set up for it, a returning user signs in with a 4-digit PIN alone, instead of username, password and fingerprint. The user chose this, with no periodic full sign-in.
+
+How the risk of a short PIN is contained:
+- **Bound to the device.** The device keeps a WebCrypto ECDSA key that cannot be exported. It must sign a fresh, single-use challenge, so the PIN does nothing from another device.
+- **Five wrong PINs revoke the device.** A full sign-in is then needed, after which quick sign-in can be set up again.
+- **Stored safely.** The PIN is kept as scrypt(HMAC(`ENCRYPTION_KEY`, PIN)). Easy PINs are refused (repeats like 1111, runs like 1234 or 4321).
+- **EAP checked every time.** Each sign-in refreshes the employee from EAP; if EAP is unreachable, the cached status is used. A disabled user or employee is refused.
+- **Admin reset revokes it.** «إعادة تعيين البصمة» also revokes every quick-sign-in device. Users manage theirs in «جلساتي ← الدخول السريع بالرمز».
+- **Logged.** Setup, removal, wrong PINs and sign-ins are in the security log.
+
 ## Open decisions (need input before production)
 
 1. **EAP = Company Central Platform** (confirmed 2026-09-28). The integration is implemented: password via `/auth/login`, fingerprint via passkeys, employees via the machine API. The fingerprint step uses passkeys registered in the Asset System (decided 2026-09-29, since there is no company domain shared with the Platform). See [deployment.md](deployment.md#eap-company-central-platform).

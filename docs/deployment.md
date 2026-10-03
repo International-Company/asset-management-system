@@ -72,6 +72,10 @@ A passkey only works on the domain it was created for, and the Platform and the 
 - **The domain is `WEB_ORIGIN`.** Passkeys are bound to its host name. Moving the Asset System to another domain (for example from `*.up.railway.app` to a company domain) means every user registers again: reset them all after the move.
 - `FINGERPRINT_MODE=code` (the development stand-in) is refused in staging/production.
 
+### Quick sign-in with a 4-digit PIN
+
+After a full sign-in, the app offers to set up a PIN on that device. It only works on that device, five wrong PINs cancel it, and «إعادة تعيين البصمة» cancels it on all of the user's devices. Details and the reasoning are in [phases.md](phases.md#quick-sign-in-with-a-pin-decided-by-the-user-2026-10-03). Nothing to configure. It uses `ENCRYPTION_KEY`, so changing that key cancels every PIN, and users set them up again after a full sign-in.
+
 ### Rate limits
 
 Every sign-in reaches the Platform from the Asset System's server, so the Platform sees one source address. Its per-address limit (`CCP_RateLimits__AuthenticationPerAddress`, default 60 a minute; each sign-in costs one `/auth/login` call, since the fingerprint is verified in the Asset System) applies to the whole company. The per-account limit (10 a minute) still protects each account. Raise the per-address value if sign-ins are refused at peak times.

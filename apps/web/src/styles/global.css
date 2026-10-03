@@ -237,6 +237,10 @@ a {
   background: var(--primary-soft);
   color: var(--text);
 }
+.alert-success {
+  background: var(--success-soft);
+  color: var(--success);
+}
 
 .badge {
   display: inline-block;

@@ -7,9 +7,10 @@ import { AnyAuthenticated, CurrentUser, Public } from '../../common/decorators';
 import { clientInfo, RequestUser } from '../../common/request-user';
 import { SettingsService } from '../settings/settings.service';
 import { AuthService } from './auth.service';
-import { AddPasskeyDto, LoginFingerprintDto, LoginPasswordDto, LoginStartDto } from './auth.dto';
+import { AddPasskeyDto, EnableQuickLoginDto, LoginFingerprintDto, LoginPasswordDto, LoginStartDto, QuickChallengeDto, QuickLoginDto } from './auth.dto';
 import { FingerprintService } from './fingerprint.service';
 import { SESSION_COOKIE } from './guards';
+import { QuickLoginService } from './quick-login.service';
 import { SessionService } from './session.service';
 
 const LOGIN_THROTTLE = { default: { limit: 10, ttl: 60_000 } };
@@ -22,6 +23,7 @@ export class AuthController {
     private readonly sessions: SessionService,
     private readonly settings: SettingsService,
     private readonly fingerprints: FingerprintService,
+    private readonly quick: QuickLoginService,
   ) {}
 
   /** What the login screen needs before sign-in: provider type and company name. */
@@ -57,6 +59,50 @@ export class AuthController {
   @HttpCode(200)
   async fingerprint(@Body() dto: LoginFingerprintDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const session = await this.auth.verifyFingerprint(dto.challengeId, dto.assertion, clientInfo(req));
+    this.setSessionCookie(res, session);
+    return { ok: true };
+  }
+
+  // ── Quick sign-in with a 4-digit PIN on a device set up for it ────────
+
+  @Public()
+  @Throttle(LOGIN_THROTTLE)
+  @Post('quick/challenge')
+  @HttpCode(200)
+  quickChallenge(@Body() dto: QuickChallengeDto) {
+    return this.quick.challenge(dto.deviceId);
+  }
+
+  @Public()
+  @Throttle(LOGIN_THROTTLE)
+  @Post('quick/login')
+  @HttpCode(200)
+  async quickLogin(@Body() dto: QuickLoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const session = await this.quick.login(dto.deviceId, dto.challengeId, dto.signature, dto.pin, clientInfo(req));
+    this.setSessionCookie(res, session);
+    return { ok: true };
+  }
+
+  @AnyAuthenticated()
+  @Get('quick/devices')
+  quickDevices(@CurrentUser() user: RequestUser) {
+    return this.quick.list(user.id);
+  }
+
+  @AnyAuthenticated()
+  @Post('quick/devices')
+  enableQuick(@CurrentUser() user: RequestUser, @Body() dto: EnableQuickLoginDto, @Req() req: Request) {
+    return this.quick.enable(user, dto.publicKey, dto.pin, clientInfo(req));
+  }
+
+  @AnyAuthenticated()
+  @Delete('quick/devices/:id')
+  @HttpCode(204)
+  async revokeQuick(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+    await this.quick.revoke(user, id, clientInfo(req));
+  }
+
+  private setSessionCookie(res: Response, session: { token: string; expiresAt: Date }) {
     res.cookie(SESSION_COOKIE, session.token, {
       httpOnly: true,
       secure: this.env.APP_ENV === 'staging' || this.env.APP_ENV === 'production',
@@ -64,7 +110,6 @@ export class AuthController {
       path: '/api',
       expires: session.expiresAt,
     });
-    return { ok: true };
   }
 
   @AnyAuthenticated()

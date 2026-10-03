@@ -8,6 +8,7 @@ afterEach(async () => {
   cleanup();
   vi.restoreAllMocks();
   localStorage.clear();
+  sessionStorage.clear();
   await clearLocalData();
 });
 

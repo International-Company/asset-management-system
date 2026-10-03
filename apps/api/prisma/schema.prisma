@@ -91,6 +91,8 @@ enum SecurityEventType {
   USER_UNLOCKED
   PASSKEY_REGISTERED
   PASSKEY_REVOKED
+  QUICK_LOGIN_ENABLED
+  QUICK_LOGIN_REVOKED
 }
 
 enum SyncOperationStatus {
@@ -169,13 +171,14 @@ model User {
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  roles           UserRole[]
-  sessions        Session[]
-  notifications   Notification[]
-  savedSearches   SavedSearch[]
-  passkeys        UserPasskey[]
-  passkeysRevoked UserPasskey[]  @relation("PasskeyRevokedBy")
+  employee          Employee           @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  roles             UserRole[]
+  sessions          Session[]
+  notifications     Notification[]
+  savedSearches     SavedSearch[]
+  passkeys          UserPasskey[]
+  passkeysRevoked   UserPasskey[]      @relation("PasskeyRevokedBy")
+  quickLoginDevices QuickLoginDevice[]
 
   @@map("users")
 }
@@ -327,6 +330,30 @@ model UserPasskey {
 
   @@index([userId])
   @@map("user_passkeys")
+}
+
+/// Quick sign-in with a 4-digit PIN, bound to one device (decided by the user,
+/// 2026-10-03). The device holds a non-extractable ECDSA key; signing in needs
+/// its signature over a fresh challenge AND the PIN. Five wrong PINs revoke the
+/// device. The PIN is stored only as scrypt(HMAC(server key, PIN), salt).
+model QuickLoginDevice {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  /// SPKI (DER) of the device's ECDSA P-256 public key.
+  publicKey      Bytes     @map("public_key")
+  pinHash        String    @map("pin_hash")
+  failedAttempts Int       @default(0) @map("failed_attempts")
+  deviceName     String?   @map("device_name")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt     DateTime? @map("last_used_at") @db.Timestamptz(3)
+  /// Revoked devices are kept for the security record.
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokedReason  String?   @map("revoked_reason")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("quick_login_devices")
 }
 
 model LoginChallenge {

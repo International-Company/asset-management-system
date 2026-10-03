@@ -8,6 +8,7 @@ import { useUnreadCount } from '../pages/NotificationsPage';
 import { useQueueCounts } from '../pages/offline/OfflinePages';
 import { useAutoSync } from '../offline/sync';
 import { ConfirmDialog, Modal } from './Modal';
+import { QuickLoginOffer } from './QuickLogin';
 import { NavIcon, type NavIconName } from './NavIcons';
 import { MenuIcon, NotificationsMenu, UserMenu } from './TopbarMenus';
 import { GlobalSearch, QrScanButton } from './TopbarSearch';
@@ -268,6 +269,7 @@ export function AppShell() {
         }}
         onClose={() => setLogoutDialog(null)}
       />
+      <QuickLoginOffer />
     </div>
   );
 }

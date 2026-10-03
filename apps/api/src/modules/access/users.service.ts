@@ -184,6 +184,9 @@ export class UsersService {
       const res = await tx.userPasskey.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date(), revokedById: actor.id } });
       await this.audit.record({ actor, operation: 'USER_PASSKEYS_RESET', entityType: 'User', entityId: id, newData: { revoked: res.count } }, tx);
       await this.securityLog.record({ type: 'PASSKEY_REVOKED', userId: id, username: before.username, actorId: actor.id, details: { all: true, revoked: res.count } }, tx);
+      // Quick PIN sign-in rides on the same trust: a lost phone loses both.
+      const quick = await tx.quickLoginDevice.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date(), revokedReason: 'admin_reset' } });
+      if (quick.count) await this.securityLog.record({ type: 'QUICK_LOGIN_REVOKED', userId: id, username: before.username, actorId: actor.id, details: { all: true, revoked: quick.count, reason: 'admin_reset' } }, tx);
       return this.getIn(tx, id);
     });
   }

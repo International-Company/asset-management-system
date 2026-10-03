@@ -759,6 +759,97 @@ main.content {
   border-color: var(--primary);
 }
 
+/* ── Quick sign-in with a PIN (components/PinInput.tsx) ──────────────────── */
+.quick-who {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  margin-block: 0.5rem 1.25rem;
+  text-align: center;
+}
+.quick-avatar {
+  display: grid;
+  place-items: center;
+  inline-size: 64px;
+  block-size: 64px;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+.quick-name {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+.pin {
+  position: relative;
+  inline-size: max-content;
+  margin-inline: auto;
+}
+.pin-boxes {
+  display: flex;
+  gap: 0.75rem;
+}
+.pin-box {
+  display: grid;
+  place-items: center;
+  inline-size: 52px;
+  block-size: 60px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.pin-box[data-filled]::after {
+  content: '';
+  inline-size: 12px;
+  block-size: 12px;
+  border-radius: 50%;
+  background: var(--text);
+}
+.pin-box[data-current] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+.pin[data-invalid] .pin-box {
+  border-color: var(--danger);
+}
+.pin[data-invalid] .pin-boxes {
+  animation: pin-shake 0.35s ease;
+}
+/* The real input covers the boxes, invisible, so taps and typing reach it. */
+.pin-input {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  opacity: 0;
+  border: 0;
+  font-size: 16px; /* no zoom on iOS */
+  cursor: text;
+}
+/* Focus shows on the current box (data-current), not around the group. */
+.pin-input:focus-visible {
+  outline: none;
+}
+.pin-input:disabled + .pin-boxes {
+  opacity: 0.6;
+}
+@keyframes pin-shake {
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pin[data-invalid] .pin-boxes { animation: none; }
+}
+.quick-alt {
+  display: flex;
+  justify-content: center;
+  margin-block-start: 1.25rem;
+}
+
 /* ── Global search (components/TopbarSearch.tsx) ─────────────────────────── */
 /* The trigger looks like a search field; it opens the search window. */
 .search-trigger {
