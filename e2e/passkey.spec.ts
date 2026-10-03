@@ -80,3 +80,54 @@ test('a device without a registered fingerprint cannot sign in', async ({ browse
   await expect(page.getByRole('heading', { name: /مرحبًا/ })).toHaveCount(0);
   await context.close();
 });
+
+test('a new device joins with a one-time code shown on a signed-in device', async ({ browser }) => {
+  const adminContext = await browser.newContext({ baseURL: 'http://localhost:4173' });
+  const admin = await adminContext.newPage();
+  await passwordSteps(admin, 'admin');
+  await admin.getByLabel('رمز محاكاة البصمة').fill(FINGERPRINT);
+  await admin.getByRole('button', { name: 'دخول' }).click();
+  await expect(admin.getByRole('heading', { name: /مرحبًا/ })).toBeVisible();
+  const users = await (await admin.request.get('/api/v1/users?q=viewer')).json();
+  const viewer = users.items.find((u: { username: string }) => u.username === 'viewer');
+  expect((await admin.request.post(`/api/v1/users/${viewer.id}/passkeys/reset`)).ok()).toBe(true);
+  await adminContext.close();
+
+  async function deviceWithSensor() {
+    const context = await browser.newContext({ baseURL: PASSKEY_SITE, locale: 'ar' });
+    const page = await context.newPage();
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('WebAuthn.enable');
+    await cdp.send('WebAuthn.addVirtualAuthenticator', {
+      options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+    });
+    return { context, page };
+  }
+
+  // The computer: registered, signed in, shows a link code.
+  const laptop = await deviceWithSensor();
+  await passwordSteps(laptop.page, 'viewer');
+  await laptop.page.getByRole('button', { name: 'تسجيل البصمة' }).click();
+  await expect(laptop.page.getByRole('heading', { name: /مرحبًا/ })).toBeVisible();
+  await laptop.page.goto('/account/sessions');
+  await laptop.page.getByRole('region', { name: 'بصماتي' }).getByRole('button', { name: 'ربط جهاز جديد' }).click();
+  const dialog = laptop.page.getByRole('dialog', { name: 'ربط جهاز جديد' });
+  const code = ((await dialog.locator('.link-code').textContent()) ?? '').replace(/\D/g, '');
+  expect(code).toHaveLength(6);
+
+  // The phone: password, the code, then its own fingerprint.
+  const phone = await deviceWithSensor();
+  await passwordSteps(phone.page, 'viewer');
+  await phone.page.getByRole('button', { name: 'جهاز جديد؟ اربطه برمز' }).click();
+  await phone.page.getByLabel('رمز الربط').pressSequentially(code);
+  await expect(phone.page.getByText(/تم قبول رمز الربط/)).toBeVisible();
+  await phone.page.getByRole('button', { name: 'تسجيل البصمة' }).click();
+  await expect(phone.page.getByRole('heading', { name: /مرحبًا/ })).toBeVisible();
+  await phone.context.close();
+
+  // The computer still has its fingerprint; both devices are listed.
+  await dialog.getByRole('button', { name: 'تم' }).click();
+  await laptop.page.reload();
+  await expect(laptop.page.getByRole('region', { name: 'بصماتي' }).getByRole('row')).toHaveCount(3);
+  await laptop.context.close();
+});

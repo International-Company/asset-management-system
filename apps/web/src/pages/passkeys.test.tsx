@@ -52,6 +52,26 @@ describe('My fingerprints (account page)', () => {
     await waitFor(() => expect(within(section).queryByText('Windows · Chrome')).not.toBeInTheDocument());
   });
 
+  it('shows a one-time code to link a new device, with the time left', async () => {
+    const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+    mockApi({
+      'GET /auth/me': me,
+      'GET /security/sessions/mine': sessions,
+      'GET /notifications/unread-count': () => ({ status: 200, body: { count: 0 } }),
+      'GET /auth/passkeys': () => ({ status: 200, body: [device('p1', 'Windows · Chrome')] }),
+      'GET /auth/quick/devices': () => ({ status: 200, body: [] }),
+      'POST /auth/passkeys/link-code': () => ({ status: 200, body: { code: '482913', expiresAt } }),
+    });
+    const user = userEvent.setup();
+    renderApp(<App />, { route: '/account/sessions' });
+
+    const section = await screen.findByRole('region', { name: 'بصماتي' });
+    await user.click(within(section).getByRole('button', { name: 'ربط جهاز جديد' }));
+    const dialog = await screen.findByRole('dialog', { name: 'ربط جهاز جديد' });
+    expect(within(dialog).getByText('482 913')).toBeInTheDocument();
+    expect(within(dialog).getByText(/ينتهي بعد (9:5\d|10:00)/)).toBeInTheDocument();
+  });
+
   it('is hidden when the development fingerprint code is in use', async () => {
     mockApi({
       'GET /auth/me': () => ({ ...me(), body: { ...me().body, fingerprintMode: 'code' } }),

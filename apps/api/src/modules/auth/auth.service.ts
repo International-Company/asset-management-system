@@ -10,7 +10,7 @@ import { SessionService } from './session.service';
 
 const CHALLENGE_TTL_MS = 5 * 60_000;
 
-type Step = 'PASSWORD' | 'FINGERPRINT';
+type Step = 'PASSWORD' | 'FINGERPRINT' | 'FINGERPRINT_LINK';
 
 /**
  * Login flow (spec §47): username → password → fingerprint → session.
@@ -83,9 +83,26 @@ export class AuthService {
     return { next: 'fingerprint', fingerprint };
   }
 
+  /**
+   * Step 3 on a new device: a one-time code from a device that is already
+   * signed in lets this attempt register the new device's fingerprint.
+   */
+  async linkDevice(challengeId: string, code: string, client: ClientInfo): Promise<{ fingerprint: FingerprintOptions }> {
+    const challenge = await this.loadChallenge(challengeId, 'FINGERPRINT');
+    const user = await this.prisma.user.findUnique({ where: { username: challenge.username }, include: { employee: true } });
+    if (!user || !user.isActive) throw new AppError('UNAUTHENTICATED');
+    await this.assertNotLocked(user, challenge.username, client);
+    if (!(await this.fingerprint.useLinkCode(user.id, code))) {
+      await this.registerFailure(user, challenge.username, client, 'invalid_link_code');
+      throw new AppError('INVALID_CREDENTIALS', 'رمز الربط غير صحيح أو انتهت صلاحيته. اطلب رمزًا جديدًا من جهازك الآخر.');
+    }
+    const fingerprint = await this.fingerprint.linkOptions(challenge.id, { id: user.id, username: user.username, fullName: user.employee.fullName });
+    return { fingerprint };
+  }
+
   /** Step 3: on success, creates the authenticated session. */
   async verifyFingerprint(challengeId: string, assertion: string, client: ClientInfo) {
-    const challenge = await this.loadChallenge(challengeId, 'FINGERPRINT');
+    const challenge = await this.loadChallenge(challengeId, ['FINGERPRINT', 'FINGERPRINT_LINK']);
     const user = await this.prisma.user.findUnique({
       where: { username: challenge.username },
       include: { employee: true },
@@ -122,9 +139,10 @@ export class AuthService {
     });
   }
 
-  private async loadChallenge(challengeId: string, step: Step) {
+  private async loadChallenge(challengeId: string, step: Step | Step[]) {
+    const steps: string[] = Array.isArray(step) ? step : [step];
     const challenge = await this.prisma.loginChallenge.findUnique({ where: { id: challengeId } });
-    if (!challenge || challenge.consumedAt || challenge.expiresAt < new Date() || challenge.step !== step) {
+    if (!challenge || challenge.consumedAt || challenge.expiresAt < new Date() || !steps.includes(challenge.step)) {
       throw new AppError('SESSION_EXPIRED', 'انتهت صلاحية محاولة الدخول. يرجى البدء من جديد.');
     }
     return challenge;

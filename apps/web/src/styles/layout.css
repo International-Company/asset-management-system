@@ -809,6 +809,15 @@ main.content {
   border-radius: 50%;
   background: var(--text);
 }
+.pin[data-length='6'] .pin-boxes {
+  gap: 0.5rem;
+}
+.pin[data-length='6'] .pin-box {
+  inline-size: 42px;
+  block-size: 52px;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
 .pin-box[data-current] {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-soft);
@@ -843,6 +852,27 @@ main.content {
 }
 @media (prefers-reduced-motion: reduce) {
   .pin[data-invalid] .pin-boxes { animation: none; }
+}
+.link-steps {
+  margin: 0 0 1rem;
+  padding-inline-start: 1.25rem;
+  line-height: 1.8;
+}
+.link-code {
+  margin-inline: auto;
+  inline-size: max-content;
+  padding: 0.6rem 1.4rem;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 2.2rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+}
+.link-code[data-expired] {
+  opacity: 0.45;
+  text-decoration: line-through;
 }
 .quick-alt {
   display: flex;

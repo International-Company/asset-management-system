@@ -7,7 +7,7 @@ import { AnyAuthenticated, CurrentUser, Public } from '../../common/decorators';
 import { clientInfo, RequestUser } from '../../common/request-user';
 import { SettingsService } from '../settings/settings.service';
 import { AuthService } from './auth.service';
-import { AddPasskeyDto, EnableQuickLoginDto, LoginFingerprintDto, LoginPasswordDto, LoginStartDto, QuickChallengeDto, QuickLoginDto } from './auth.dto';
+import { AddPasskeyDto, EnableQuickLoginDto, LinkDeviceDto, LoginFingerprintDto, LoginPasswordDto, LoginStartDto, QuickChallengeDto, QuickLoginDto } from './auth.dto';
 import { FingerprintService } from './fingerprint.service';
 import { SESSION_COOKIE } from './guards';
 import { QuickLoginService } from './quick-login.service';
@@ -61,6 +61,15 @@ export class AuthController {
     const session = await this.auth.verifyFingerprint(dto.challengeId, dto.assertion, clientInfo(req));
     this.setSessionCookie(res, session);
     return { ok: true };
+  }
+
+  /** Step 3 on a new device: a link code from a signed-in device allows registering its fingerprint. */
+  @Public()
+  @Throttle(LOGIN_THROTTLE)
+  @Post('login/link')
+  @HttpCode(200)
+  link(@Body() dto: LinkDeviceDto, @Req() req: Request) {
+    return this.auth.linkDevice(dto.challengeId, dto.code, clientInfo(req));
   }
 
   // ── Quick sign-in with a 4-digit PIN on a device set up for it ────────
@@ -144,6 +153,14 @@ export class AuthController {
   @Get('passkeys')
   passkeys(@CurrentUser() user: RequestUser) {
     return this.fingerprints.list(user.id);
+  }
+
+  /** A one-time code to type on a new device at sign-in, to add its fingerprint. */
+  @AnyAuthenticated()
+  @Post('passkeys/link-code')
+  @HttpCode(200)
+  linkCode(@CurrentUser() user: RequestUser, @Req() req: Request) {
+    return this.fingerprints.createLinkCode({ id: user.id, username: user.username, fullName: user.fullName, sessionId: user.sessionId }, clientInfo(req));
   }
 
   /** Step 1 of adding a fingerprint from another device. */

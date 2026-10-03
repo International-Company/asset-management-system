@@ -21,6 +21,7 @@ const PUBLIC_ROUTES = [
   'GET /api/v1/auth/config',
   'GET /api/v1/health',
   'POST /api/v1/auth/login/fingerprint',
+  'POST /api/v1/auth/login/link',
   'POST /api/v1/auth/login/password',
   'POST /api/v1/auth/login/start',
   'POST /api/v1/auth/quick/challenge',

@@ -106,6 +106,34 @@ describe('Login with a passkey registered in the Asset System', () => {
     expect(JSON.parse(sent.assertion)).toMatchObject({ id: 'new-cred', response: { attestationObject: 'YQ' } });
   });
 
+  it('a new device is linked with a code from a signed-in device, then registers its fingerprint', async () => {
+    webauthn.startRegistration.mockResolvedValue({ id: 'phone-cred', rawId: 'phone-cred', type: 'public-key', response: { attestationObject: 'YQ' } });
+    const calls = mocks({ type: 'passkey', options: request });
+    let tries = 0;
+    const base = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/auth/login/link')) {
+        calls.push({ key: 'POST /auth/login/link', body: JSON.parse(String(init?.body)) });
+        tries += 1;
+        return tries === 1
+          ? new Response(JSON.stringify({ error: { code: 'INVALID_CREDENTIALS', message: 'رمز الربط غير صحيح أو انتهت صلاحيته.' } }), { status: 401, headers: { 'Content-Type': 'application/json' } })
+          : new Response(JSON.stringify({ fingerprint: { type: 'passkey-register', options: creation } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return base(input, init);
+    });
+    const user = await reachFingerprint();
+    await user.click(await screen.findByRole('button', { name: 'جهاز جديد؟ اربطه برمز' }));
+    await user.type(screen.getByLabelText('رمز الربط'), '111111');
+    expect(await screen.findByRole('alert')).toHaveTextContent('رمز الربط غير صحيح');
+    await user.type(screen.getByLabelText('رمز الربط'), '482913');
+    expect(await screen.findByText(/تم قبول رمز الربط/)).toBeInTheDocument();
+    expect(calls.filter((c) => c.key === 'POST /auth/login/link').at(-1)!.body).toEqual({ challengeId: 'c1', code: '482913' });
+
+    await user.click(screen.getByRole('button', { name: 'تسجيل البصمة' }));
+    expect(await screen.findByRole('heading', { name: /مرحبًا/ })).toBeInTheDocument();
+    expect(webauthn.startRegistration).toHaveBeenCalledWith({ optionsJSON: creation });
+  });
+
   it('later sign-ins ask the device to sign the challenge', async () => {
     webauthn.startAuthentication.mockResolvedValue({ id: 'cred-1', rawId: 'cred-1', type: 'public-key', response: { signature: 'c2ln' } });
     mocks({ type: 'passkey', options: request });

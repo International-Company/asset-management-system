@@ -28,6 +28,15 @@ export class LoginFingerprintDto {
   assertion: string;
 }
 
+export class LinkDeviceDto {
+  @IsUUID()
+  challengeId: string;
+
+  @IsString()
+  @Matches(/^\d{6}$/, { message: 'رمز الربط ستة أرقام.' })
+  code: string;
+}
+
 export class EnableQuickLoginDto {
   /** The device's ECDSA P-256 public key (SPKI, base64). Its private key never leaves the device. */
   @IsString()

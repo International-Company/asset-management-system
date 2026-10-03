@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/browser';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { formatDateTime } from '../lib/format';
 import { createPasskey, PasskeyCancelled, passkeysSupported } from '../lib/passkey';
-import { ConfirmDialog } from '../components/Modal';
+import { ConfirmDialog, Modal } from '../components/Modal';
 import { MyQuickLogin } from '../components/QuickLogin';
 import { Empty, ErrorState, Loading } from '../components/States';
 import { SessionStatusBadge, type SessionRow } from './sessions';
@@ -97,6 +97,7 @@ function MyPasskeys() {
     },
     onSuccess: () => void refresh(),
   });
+  const linkCode = useMutation({ mutationFn: () => api<LinkCode>('/auth/passkeys/link-code', { method: 'POST' }) });
   const remove = useMutation({
     mutationFn: (id: string) => api(`/auth/passkeys/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
@@ -106,6 +107,7 @@ function MyPasskeys() {
   });
 
   if (!enabled) return null;
+  const linkError = linkCode.error instanceof ApiError ? linkCode.error.message : null;
   const addError =
     add.error instanceof PasskeyCancelled
       ? 'لم يكتمل تسجيل البصمة على هذا الجهاز.'
@@ -121,12 +123,22 @@ function MyPasskeys() {
           <h2 id="passkeys-title">بصماتي</h2>
           <p className="muted">الأجهزة التي تستطيع الدخول ببصمتك. تبقى البصمة على كل جهاز، ولا يُحفظ في النظام إلا مفتاح عام.</p>
         </div>
-        {passkeysSupported() && (
-          <button type="button" className="btn" disabled={add.isPending} onClick={() => add.mutate()}>
-            {add.isPending ? 'جارٍ التسجيل…' : 'إضافة هذا الجهاز'}
+        <div className="page-actions">
+          <button type="button" className="btn btn-primary" disabled={linkCode.isPending} onClick={() => linkCode.mutate()}>
+            {linkCode.isPending ? 'جارٍ الإنشاء…' : 'ربط جهاز جديد'}
           </button>
-        )}
+          {passkeysSupported() && (
+            <button type="button" className="btn" disabled={add.isPending} onClick={() => add.mutate()}>
+              {add.isPending ? 'جارٍ التسجيل…' : 'إضافة هذا الجهاز'}
+            </button>
+          )}
+        </div>
       </div>
+      {linkError && (
+        <div className="alert alert-error" role="alert">
+          {linkError}
+        </div>
+      )}
       {addError && (
         <div className="alert alert-error" role="alert">
           {addError}
@@ -172,6 +184,7 @@ function MyPasskeys() {
           </table>
         </div>
       )}
+      {linkCode.data && <LinkCodeDialog code={linkCode.data} onClose={() => linkCode.reset()} onRenew={() => linkCode.mutate()} />}
       <ConfirmDialog
         open={!!removing}
         title="حذف البصمة"
@@ -184,5 +197,49 @@ function MyPasskeys() {
         onClose={() => setRemoving(null)}
       />
     </section>
+  );
+}
+
+interface LinkCode {
+  code: string;
+  expiresAt: string;
+}
+
+/** The one-time code to type on the new device, with the time it has left. */
+function LinkCodeDialog({ code, onClose, onRenew }: { code: LinkCode; onClose: () => void; onRenew: () => void }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const left = Math.max(0, Math.round((new Date(code.expiresAt).getTime() - now) / 1000));
+  const expired = left === 0;
+  const clock = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+
+  return (
+    <Modal open title="ربط جهاز جديد" onClose={onClose}>
+      <ol className="link-steps">
+        <li>على الجهاز الجديد افتح أصولي، وادخل باسم المستخدم وكلمة المرور.</li>
+        <li>في خطوة البصمة اضغط «جهاز جديد؟ اربطه برمز».</li>
+        <li>اكتب هذا الرمز، ثم سجّل بصمة الجهاز الجديد.</li>
+      </ol>
+      <div className="link-code" data-expired={expired || undefined} aria-label={`رمز الربط ${code.code.split('').join(' ')}`} role="group">
+        <bdi dir="ltr">{`${code.code.slice(0, 3)} ${code.code.slice(3)}`}</bdi>
+      </div>
+      <p className="muted" style={{ textAlign: 'center' }} aria-live="polite">
+        {expired ? 'انتهت صلاحية الرمز.' : `صالح لمرة واحدة، وينتهي بعد ${clock}`}
+      </p>
+      <div className="modal-footer" style={{ paddingInline: 0, borderBlockStart: 0 }}>
+        {expired ? (
+          <button type="button" className="btn btn-primary" onClick={onRenew}>
+            رمز جديد
+          </button>
+        ) : (
+          <button type="button" className="btn btn-primary" onClick={onClose}>
+            تم
+          </button>
+        )}
+      </div>
+    </Modal>
   );
 }

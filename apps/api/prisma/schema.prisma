@@ -93,6 +93,7 @@ enum SecurityEventType {
   PASSKEY_REVOKED
   QUICK_LOGIN_ENABLED
   QUICK_LOGIN_REVOKED
+  DEVICE_LINK_CODE_CREATED
 }
 
 enum SyncOperationStatus {
@@ -179,6 +180,7 @@ model User {
   passkeys          UserPasskey[]
   passkeysRevoked   UserPasskey[]      @relation("PasskeyRevokedBy")
   quickLoginDevices QuickLoginDevice[]
+  deviceLinkCodes   DeviceLinkCode[]
 
   @@map("users")
 }
@@ -336,6 +338,23 @@ model UserPasskey {
 /// 2026-10-03). The device holds a non-extractable ECDSA key; signing in needs
 /// its signature over a fresh challenge AND the PIN. Five wrong PINs revoke the
 /// device. The PIN is stored only as scrypt(HMAC(server key, PIN), salt).
+/// A one-time code shown on a signed-in device to add the fingerprint of a new
+/// device (with the password, at sign-in). Only an HMAC of the code is stored.
+model DeviceLinkCode {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  codeHash       String    @map("code_hash")
+  failedAttempts Int       @default(0) @map("failed_attempts")
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt         DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("device_link_codes")
+}
+
 model QuickLoginDevice {
   id             String    @id @default(uuid()) @db.Uuid
   userId         String    @map("user_id") @db.Uuid

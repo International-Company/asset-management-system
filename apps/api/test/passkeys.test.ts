@@ -132,6 +132,65 @@ describe('Fingerprint with passkeys registered in the Asset System', () => {
     expect(await prisma.auditLog.count({ where: { entityId: viewer.id, operation: 'USER_PASSKEYS_RESET' } })).toBeGreaterThan(0);
   });
 
+  it('a new device joins with a one-time code from a signed-in device, keeping the old fingerprint', async () => {
+    await fresh('viewer');
+    const laptop = new SoftAuthenticator(ORIGIN);
+    let step = await passwordStep('viewer');
+    const cookie = cookieOf(await fingerprintStep(step.challengeId, laptop.register(step.fingerprint.options.challenge)));
+
+    const { code, expiresAt } = (await api().post('/api/v1/auth/passkeys/link-code').set('Cookie', cookie).expect(200)).body;
+    expect(code).toMatch(/^\d{6}$/);
+    expect(new Date(expiresAt).getTime()).toBeGreaterThan(Date.now());
+    // Only a hash of the code is kept.
+    const stored = await prisma.deviceLinkCode.findFirstOrThrow({ where: { usedAt: null }, orderBy: { createdAt: 'desc' } });
+    expect(stored.codeHash).not.toContain(code);
+
+    // On the phone: password, then the code, then its own fingerprint.
+    const phone = new SoftAuthenticator(ORIGIN);
+    step = await passwordStep('viewer');
+    expect(step.fingerprint.type).toBe('passkey');
+    const wrong = code === '000000' ? '000001' : '000000';
+    expect((await api().post('/api/v1/auth/login/link').send({ challengeId: step.challengeId, code: wrong })).body.error.code).toBe('INVALID_CREDENTIALS');
+    const linked = (await api().post('/api/v1/auth/login/link').send({ challengeId: step.challengeId, code }).expect(200)).body;
+    expect(linked.fingerprint.type).toBe('passkey-register');
+    expect(linked.fingerprint.options.excludeCredentials).toEqual([expect.objectContaining({ id: laptop.id })]);
+    expect((await fingerprintStep(step.challengeId, phone.register(linked.fingerprint.options.challenge))).status).toBe(200);
+
+    // Both devices now sign in with their own fingerprint.
+    for (const device of [laptop, phone]) {
+      step = await passwordStep('viewer');
+      expect((await fingerprintStep(step.challengeId, device.authenticate(step.fingerprint.options.challenge))).status).toBe(200);
+    }
+    // The code was single use.
+    step = await passwordStep('viewer');
+    expect((await api().post('/api/v1/auth/login/link').send({ challengeId: step.challengeId, code })).status).toBe(401);
+  });
+
+  it('a link code dies after five wrong tries, and a new one replaces the old', async () => {
+    await fresh('viewer');
+    const laptop = new SoftAuthenticator(ORIGIN);
+    let step = await passwordStep('viewer');
+    const cookie = cookieOf(await fingerprintStep(step.challengeId, laptop.register(step.fingerprint.options.challenge)));
+
+    const first = (await api().post('/api/v1/auth/passkeys/link-code').set('Cookie', cookie).expect(200)).body.code;
+    const second = (await api().post('/api/v1/auth/passkeys/link-code').set('Cookie', cookie).expect(200)).body.code;
+    step = await passwordStep('viewer');
+    if (first !== second) expect((await api().post('/api/v1/auth/login/link').send({ challengeId: step.challengeId, code: first })).status).toBe(401);
+
+    const third = (await api().post('/api/v1/auth/passkeys/link-code').set('Cookie', cookie).expect(200)).body.code;
+    const user = await prisma.user.findUniqueOrThrow({ where: { username: 'viewer' } });
+    for (let i = 0; i < 5; i++) {
+      await prisma.user.update({ where: { id: user.id }, data: { failedLoginCount: 0 } });
+      step = await passwordStep('viewer');
+      const bad = String((Number(third) + 1 + i) % 1_000_000).padStart(6, '0');
+      expect((await api().post('/api/v1/auth/login/link').send({ challengeId: step.challengeId, code: bad })).status).toBe(401);
+    }
+    await prisma.user.update({ where: { id: user.id }, data: { failedLoginCount: 0 } });
+    step = await passwordStep('viewer');
+    expect((await api().post('/api/v1/auth/login/link').send({ challengeId: step.challengeId, code: third })).status).toBe(401);
+    expect(await prisma.securityLog.count({ where: { username: 'viewer', type: 'DEVICE_LINK_CODE_CREATED' } })).toBeGreaterThan(0);
+  });
+
   it('the development code is refused in this mode', async () => {
     await fresh('viewer');
     await expect(login(app, 'viewer')).rejects.toThrow();

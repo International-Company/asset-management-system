@@ -35,6 +35,9 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [usePassword, setUsePassword] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [linkCode, setLinkCode] = useState('');
+  const [linked, setLinked] = useState(false);
   const quick = useQuickDevice();
 
   const config = useQuery({
@@ -71,14 +74,26 @@ export function LoginPage() {
     setPassword('');
     setAssertion('');
     setFingerprint(null);
+    setLinking(false);
+    setLinkCode('');
+    setLinked(false);
     setError(message ?? null);
   };
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
+  /** `typedCode`: the link code as just typed (state may not have caught up yet). */
+  async function submit(e?: FormEvent, typedCode?: string) {
+    e?.preventDefault();
     setError(null);
     setBusy(true);
     try {
+      if (step === 'fingerprint' && linking) {
+        // A one-time code from a signed-in device: this device may now register its fingerprint.
+        const res = await api<{ fingerprint: FingerprintOptions }>('/auth/login/link', { method: 'POST', json: { challengeId, code: typedCode ?? linkCode } });
+        setFingerprint(res.fingerprint);
+        setLinking(false);
+        setLinked(true);
+        return;
+      }
       if (step === 'username') {
         const res = await api<{ challengeId: string }>('/auth/login/start', { method: 'POST', json: { username } });
         setChallengeId(res.challengeId);
@@ -110,11 +125,17 @@ export function LoginPage() {
         setError(
           fingerprint?.type === 'passkey-register'
             ? 'لم يكتمل تسجيل البصمة. تأكد أن في الجهاز مستشعر بصمة (أو Windows Hello) مفعّلًا، ثم أعد المحاولة.'
-            : 'لم يكتمل التحقق من البصمة. إن كنت تستخدم جهازًا جديدًا فاطلب من مدير النظام إعادة تعيين بصمتك، أو أضف هذا الجهاز من صفحة «جلساتي» على جهازك الأول.',
+            : 'لم يكتمل التحقق من البصمة. إن كان هذا جهازًا جديدًا فاضغط «جهاز جديد؟ اربطه برمز»، واطلب الرمز من «جلساتي ← بصماتي» على جهازك الأول.',
         );
         return;
       }
       const apiErr = err instanceof ApiError ? err : null;
+      if (linking && (apiErr?.code === 'INVALID_CREDENTIALS' || apiErr?.code === 'VALIDATION_ERROR')) {
+        // A wrong code: try again in the same attempt.
+        setLinkCode('');
+        setError(apiErr.message);
+        return;
+      }
       if (apiErr?.code === 'SESSION_EXPIRED' || apiErr?.code === 'ACCOUNT_LOCKED' || apiErr?.code === 'FORBIDDEN') {
         restart(apiErr.message);
       } else if (apiErr?.code === 'INVALID_CREDENTIALS') {
@@ -132,7 +153,7 @@ export function LoginPage() {
   const usesCode = fingerprint?.type === 'code';
   const usesPasskey = fingerprint?.type === 'passkey' || fingerprint?.type === 'passkey-register';
   const registering = fingerprint?.type === 'passkey-register';
-  const canSubmitFingerprint = usesCode ? !!assertion : usesPasskey && passkeysSupported();
+  const canSubmitFingerprint = linking ? linkCode.length === 6 : usesCode ? !!assertion : usesPasskey && passkeysSupported();
 
   return (
     <div className="center-page">
@@ -217,13 +238,32 @@ export function LoginPage() {
                   />
                   <span className="hint">بيئة التطوير: مزود المصادقة التجريبي يحاكي خطوة البصمة.</span>
                 </div>
+              ) : linking ? (
+                <>
+                  <p>اكتب رمز الربط الظاهر على جهازك الآخر («جلساتي ← بصماتي ← ربط جهاز جديد»).</p>
+                  <PinInput id="link-code" label="رمز الربط" length={6} secret={false} value={linkCode} onChange={setLinkCode} onComplete={(v) => void submit(undefined, v)} disabled={busy} autoFocus invalid={!!error} />
+                  <div className="quick-alt" style={{ marginBlockEnd: '1rem' }}>
+                    <button type="button" className="btn-link" onClick={() => { setLinking(false); setLinkCode(''); setError(null); }}>
+                      رجوع إلى التحقق بالبصمة
+                    </button>
+                  </div>
+                </>
               ) : passkeysSupported() && registering ? (
                 <>
-                  <div className="alert alert-info">هذا أول دخول لك من هذا الحساب: سجّل بصمتك الآن. ستُستخدم في كل دخول لاحق.</div>
+                  <div className="alert alert-info">
+                    {linked ? 'تم قبول رمز الربط: سجّل بصمة هذا الجهاز الآن. ستبقى بصمة جهازك الآخر كما هي.' : 'هذا أول دخول لك من هذا الحساب: سجّل بصمتك الآن. ستُستخدم في كل دخول لاحق.'}
+                  </div>
                   <p>اضغط «تسجيل البصمة» ثم ضع إصبعك على مستشعر البصمة في جهازك. تبقى البصمة على الجهاز ولا تُرسل إلى أي خادم.</p>
                 </>
               ) : passkeysSupported() ? (
-                <p>اضغط «التحقق بالبصمة» ثم ضع إصبعك على مستشعر البصمة في جهازك. تبقى البصمة على الجهاز ولا تُرسل إلى أي خادم.</p>
+                <>
+                  <p>اضغط «التحقق بالبصمة» ثم ضع إصبعك على مستشعر البصمة في جهازك. تبقى البصمة على الجهاز ولا تُرسل إلى أي خادم.</p>
+                  <div className="quick-alt" style={{ marginBlock: '0 1rem' }}>
+                    <button type="button" className="btn-link" onClick={() => { setLinking(true); setError(null); }}>
+                      جهاز جديد؟ اربطه برمز
+                    </button>
+                  </div>
+                </>
               ) : (
                 <div className="alert alert-warning">هذا المتصفح لا يدعم الدخول بالبصمة (Passkey). استخدم متصفحًا حديثًا على جهاز فيه مستشعر بصمة.</div>
               )}
@@ -235,7 +275,7 @@ export function LoginPage() {
             className="btn btn-primary btn-block"
             disabled={busy || (step === 'fingerprint' && !canSubmitFingerprint)}
           >
-            {busy ? 'جارٍ التحقق…' : step === 'fingerprint' ? (registering ? 'تسجيل البصمة' : usesPasskey ? 'التحقق بالبصمة' : 'دخول') : 'متابعة'}
+            {busy ? 'جارٍ التحقق…' : step === 'fingerprint' && linking ? 'ربط الجهاز' : step === 'fingerprint' ? (registering ? 'تسجيل البصمة' : usesPasskey ? 'التحقق بالبصمة' : 'دخول') : 'متابعة'}
           </button>
         </form>
         {quick.data && step === 'username' && (

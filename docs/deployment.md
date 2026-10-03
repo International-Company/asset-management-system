@@ -67,7 +67,10 @@ A passkey only works on the domain it was created for, and the Platform and the 
 
 - **First sign-in:** after the password, the person registers the device's fingerprint (phone, laptop with a fingerprint reader, Windows Hello). Every later sign-in asks that device to sign a fresh challenge.
 - **Only public keys are stored** (`user_passkeys`). The fingerprint never leaves the device. A user-verification flag is required, so a tap without the fingerprint is refused.
-- **More devices:** a signed-in user adds them from «جلساتي ← بصماتي». The last one cannot be removed.
+- **More devices:** two ways.
+  - On the new device, while signed in there: «جلساتي ← بصماتي ← إضافة هذا الجهاز».
+  - A new device that cannot sign in yet, for example a phone when the fingerprint is on the computer: on the signed-in device, «جلساتي ← بصماتي ← ربط جهاز جديد» shows a 6-digit code. On the new device, sign in with the password, choose «جهاز جديد؟ اربطه برمز», type the code, and register that device's fingerprint. The code works once, for 10 minutes. Five wrong codes cancel it, and wrong codes count toward the account lockout. Only an HMAC of the code is stored.
+- **Removing:** the last fingerprint cannot be removed.
 - **Lost or replaced device:** an administrator uses «إعادة تعيين البصمة» on the user's page. All the user's passkeys are revoked (kept for the record, never deleted), and the next sign-in registers a new one after the password. This is audited and appears in the security log.
 - **The domain is `WEB_ORIGIN`.** Passkeys are bound to its host name. Moving the Asset System to another domain (for example from `*.up.railway.app` to a company domain) means every user registers again: reset them all after the move.
 - `FINGERPRINT_MODE=code` (the development stand-in) is refused in staging/production.

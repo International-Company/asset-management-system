@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   type AuthenticationResponseJSON,
@@ -37,6 +37,9 @@ interface Account {
 }
 
 const ADD_CHALLENGE_TTL_MS = 5 * 60_000;
+/** A device link code works for 10 minutes, once, and dies after 5 wrong tries. */
+export const LINK_CODE_TTL_MS = 10 * 60_000;
+const LINK_CODE_MAX_ATTEMPTS = 5;
 
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
@@ -98,7 +101,7 @@ export class FingerprintService {
   }
 
   /** Verifies the fingerprint step. A first-time registration also counts as the fingerprint. */
-  async verify(challenge: { webauthnChallenge: string | null }, user: Account, assertion: string, client: ClientInfo): Promise<boolean> {
+  async verify(challenge: { step: string; webauthnChallenge: string | null }, user: Account, assertion: string, client: ClientInfo): Promise<boolean> {
     if (this.mode === 'code') return safeEqual(assertion, this.env.MOCK_AUTH_FINGERPRINT ?? '');
     if (!challenge.webauthnChallenge) return false;
     const response = this.parse(assertion);
@@ -106,11 +109,58 @@ export class FingerprintService {
 
     if ('attestationObject' in (response.response as object)) {
       // Registering at sign-in is allowed only while the account has no passkey
-      // (first sign-in, or after an administrator reset).
-      if ((await this.active(user.id)).length > 0) return false;
+      // (first sign-in, or after an administrator reset), or after a device link
+      // code from a signed-in device was accepted for this attempt.
+      if (challenge.step !== 'FINGERPRINT_LINK' && (await this.active(user.id)).length > 0) return false;
       return this.register(user, response as RegistrationResponseJSON, challenge.webauthnChallenge, client);
     }
     return this.authenticate(user, response as AuthenticationResponseJSON, challenge.webauthnChallenge);
+  }
+
+  // ── Linking a new device with a code from a signed-in one ─────────────
+
+  /** Shown on a signed-in device. A new code replaces any earlier unused one. */
+  async createLinkCode(user: Account & { sessionId?: string }, client: ClientInfo) {
+    this.requirePasskeys();
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    const expiresAt = new Date(Date.now() + LINK_CODE_TTL_MS);
+    await this.prisma.transaction(async (tx) => {
+      await tx.deviceLinkCode.updateMany({ where: { userId: user.id, usedAt: null, expiresAt: { gt: new Date() } }, data: { expiresAt: new Date() } });
+      await tx.deviceLinkCode.create({ data: { userId: user.id, codeHash: this.linkHash(user.id, code), expiresAt } });
+      await this.securityLog.record({ type: 'DEVICE_LINK_CODE_CREATED', userId: user.id, username: user.username, actorId: user.id, sessionId: user.sessionId, client, details: { expiresAt } }, tx);
+    });
+    return { code, expiresAt };
+  }
+
+  /** Spends the user's current link code. A wrong code counts against it. */
+  async useLinkCode(userId: string, code: string): Promise<boolean> {
+    if (this.mode !== 'passkey') return false;
+    const row = await this.prisma.deviceLinkCode.findFirst({
+      where: { userId, usedAt: null, expiresAt: { gt: new Date() }, failedAttempts: { lt: LINK_CODE_MAX_ATTEMPTS } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!row) return false;
+    if (!/^\d{6}$/.test(code) || !safeEqual(this.linkHash(userId, code), row.codeHash)) {
+      const attempts = row.failedAttempts + 1;
+      await this.prisma.deviceLinkCode.update({
+        where: { id: row.id },
+        data: { failedAttempts: attempts, ...(attempts >= LINK_CODE_MAX_ATTEMPTS ? { expiresAt: new Date() } : {}) },
+      });
+      return false;
+    }
+    const used = await this.prisma.deviceLinkCode.updateMany({ where: { id: row.id, usedAt: null }, data: { usedAt: new Date() } });
+    return used.count === 1;
+  }
+
+  /** After a valid link code: this sign-in attempt may register the new device's passkey. */
+  async linkOptions(challengeId: string, user: Account): Promise<FingerprintOptions> {
+    const options = await this.registrationOptions(user, await this.active(user.id));
+    const moved = await this.prisma.loginChallenge.updateMany({
+      where: { id: challengeId, step: 'FINGERPRINT', consumedAt: null },
+      data: { step: 'FINGERPRINT_LINK', webauthnChallenge: options.challenge },
+    });
+    if (moved.count === 0) throw new AppError('SESSION_EXPIRED');
+    return { type: 'passkey-register', options };
   }
 
   // ── Account page ──────────────────────────────────────────────────────
@@ -171,6 +221,10 @@ export class FingerprintService {
 
   private requirePasskeys(): void {
     if (this.mode !== 'passkey') throw AppError.invalidState('البصمة عبر مفاتيح المرور غير مفعّلة في هذه البيئة.');
+  }
+
+  private linkHash(userId: string, code: string): string {
+    return createHmac('sha256', this.env.ENCRYPTION_KEY).update(`device-link:${userId}:${code}`).digest('hex');
   }
 
   private active(userId: string) {

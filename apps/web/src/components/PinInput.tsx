@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 /**
- * Four PIN boxes. One real input sits over them (numeric keypad on phones,
+ * PIN boxes (four by default). One real input sits over them (numeric keypad on phones,
  * paste and screen readers work as usual); the boxes only show progress.
  */
 export function PinInput({
@@ -13,6 +13,8 @@ export function PinInput({
   disabled,
   autoFocus,
   invalid,
+  length = 4,
+  secret = true,
 }: {
   id: string;
   label: string;
@@ -22,6 +24,9 @@ export function PinInput({
   disabled?: boolean;
   autoFocus?: boolean;
   invalid?: boolean;
+  length?: number;
+  /** Hide the digits (PINs) or show them (one-time codes). */
+  secret?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
@@ -30,17 +35,17 @@ export function PinInput({
     if (autoFocus && !disabled) ref.current?.focus();
   }, [autoFocus, disabled]);
   return (
-    <div className="pin" data-invalid={invalid || undefined}>
+    <div className="pin" data-length={length} data-invalid={invalid || undefined}>
       <input
         ref={ref}
         id={id}
         className="pin-input"
         aria-label={label}
-        type="password"
+        type={secret ? 'password' : 'text'}
         inputMode="numeric"
         autoComplete="off"
         pattern="[0-9]*"
-        maxLength={4}
+        maxLength={length}
         dir="ltr"
         value={value}
         disabled={disabled}
@@ -48,14 +53,16 @@ export function PinInput({
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         onChange={(e) => {
-          const next = e.target.value.replace(/\D/g, '').slice(0, 4);
+          const next = e.target.value.replace(/\D/g, '').slice(0, length);
           onChange(next);
-          if (next.length === 4) onComplete?.(next);
+          if (next.length === length) onComplete?.(next);
         }}
       />
       <div className="pin-boxes" aria-hidden="true" dir="ltr">
-        {[0, 1, 2, 3].map((i) => (
-          <span key={i} className="pin-box" data-filled={i < value.length || undefined} data-current={(focused && i === Math.min(value.length, 3)) || undefined} />
+        {Array.from({ length }, (_, i) => (
+          <span key={i} className="pin-box" data-filled={(secret && i < value.length) || undefined} data-current={(focused && i === Math.min(value.length, length - 1)) || undefined}>
+            {secret ? null : value[i]}
+          </span>
         ))}
       </div>
     </div>

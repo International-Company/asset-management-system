@@ -18,6 +18,7 @@ export const SECURITY_EVENT_LABELS: Record<string, string> = {
   PASSKEY_REVOKED: 'إلغاء بصمة',
   QUICK_LOGIN_ENABLED: 'تفعيل الدخول السريع بالرمز',
   QUICK_LOGIN_REVOKED: 'إلغاء الدخول السريع بالرمز',
+  DEVICE_LINK_CODE_CREATED: 'إنشاء رمز ربط جهاز جديد',
 };
 
 export const LOGIN_FAILURE_REASONS: Record<string, string> = {
@@ -25,6 +26,7 @@ export const LOGIN_FAILURE_REASONS: Record<string, string> = {
   fingerprint_failed: 'فشل التحقق من البصمة',
   account_locked: 'الحساب مقفل',
   no_system_access: 'لا يملك حسابًا في النظام',
+  invalid_link_code: 'رمز ربط جهاز خاطئ',
   quick_wrong_pin: 'رمز دخول سريع خاطئ',
   quick_bad_device_signature: 'دخول سريع من جهاز غير موثوق',
 };
